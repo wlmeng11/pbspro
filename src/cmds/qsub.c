@@ -162,7 +162,7 @@
 
 #define MAX_QSUB_PREFIX_LEN 32
 #define QSUB_DMN_TIMEOUT_LONG 60  /* timeout for qsub background process */
-#define QSUB_DMN_TIMEOUT_SHORT 5  
+#define QSUB_DMN_TIMEOUT_SHORT 5
 
 static char PBS_DPREFIX_DEFAULT[] = "#PBS";
 
@@ -2758,7 +2758,7 @@ done:
 
 /**
  * @brief
- * 	Get a TGT for use at the remote host */
+ * 	Get a TGT for use at the remote host
  *
  * @param[in] context - library context
  * @param[in] auth_context - authentication context
@@ -4948,7 +4948,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 
 	if (V_opt) {
 		qsub_envlist = env_array_to_varlist(envp);
-        }
+	}
 
 	/*
 	 * Disable backgrounding if we are inside another qsub
