@@ -4919,6 +4919,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		else {
 			exit_qsub(1);
 		}
+	}
 #else
 	if (gui_opt) {
 		if (!Interact_opt) {
@@ -4926,8 +4927,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 			exit_qsub(1);
 		}
 		set_attr(&attrib, ATTR_GUI, "TRUE");
-#endif
 	}
+#endif
 	set_opt_defaults();		/* set option default values */
 	server_out[0] = '\0';
 	if (parse_destination_id(destination, &q_n_out, &s_n_out)) {
