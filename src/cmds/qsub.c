@@ -4859,8 +4859,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 					 */
 					set_attr(&attrib, ATTR_N, basename);
 				}
-				if ((errflg=get_script(f, script_tmp,
-					set_dir_prefix(dir_prefix, C_opt))) > 0) {
+				if ((errflg=get_script(f, script_tmp, set_dir_prefix(dir_prefix, C_opt))) > 0) {
 					(void)unlink(script_tmp);
 					exit_qsub(1);
 				} else if (errflg < 0) {
@@ -4877,8 +4876,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 #ifndef WIN32
 	if (Forwardx11_opt) {
 		if (!Interact_opt) {
-			fprintf(stderr, "qsub: X11 Forwarding possible only for "
-				"interactive jobs\n");
+			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
 			exit_qsub(1);
 		}
 		/* get the DISPLAY's auth protocol, hexdata, and screen number */
@@ -4905,8 +4903,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	set_opt_defaults();		/* set option default values */
 	server_out[0] = '\0';
 	if (parse_destination_id(destination, &q_n_out, &s_n_out)) {
-		fprintf(stderr, "qsub: illegally formed destination: %s\n",
-			destination);
+		fprintf(stderr, "qsub: illegally formed destination: %s\n", destination);
 		(void)unlink(script_tmp);
 		exit_qsub(2);
 	} else if (notNULL(s_n_out)) {
