@@ -522,8 +522,7 @@ expand_varlist(char *varlist)
 
 			ev = getenv(vn);
 			if (ev == NULL) {
-				fprintf(stderr,
-					"qsub: cannot send environment with the job\n");
+				fprintf(stderr, "qsub: cannot send environment with the job\n");
 				goto expand_varlist_err;
 			}
 
@@ -540,8 +539,7 @@ expand_varlist(char *varlist)
 			strcat(v_value1, "=");
 
 			if (copy_env_value(v_value1, ev, 1) == NULL) {
-				fprintf(stderr,
-					"qsub: cannot send environment with the job\n");
+				fprintf(stderr, "qsub: cannot send environment with the job\n");
 				goto expand_varlist_err;
 			}
 		} else if (vv != NULL) {
@@ -551,26 +549,22 @@ expand_varlist(char *varlist)
 			strcat(v_value1, vn);
 			strcat(v_value1, "=");
 			if (copy_env_value(v_value1, vv, 0) == NULL) {
-				fprintf(stderr,
-					"qsub: cannot send environment with the job\n");
+				fprintf(stderr, "qsub: cannot send environment with the job\n");
 				goto expand_varlist_err;
 			}
 		}
 
 		p1 = comma_token(NULL);
 	}
-	if (v_value2 != NULL) {
+	if (v_value2 != NULL)
 		free(v_value2);
-	}
 	return (v_value1);
 
 expand_varlist_err:
-	if (v_value1 != NULL) {
+	if (v_value1 != NULL)
 		free(v_value1);
-	}
-	if (v_value2 != NULL) {
+	if (v_value2 != NULL)
 		free(v_value2);
-	}
 	return NULL;
 }
 
@@ -687,18 +681,13 @@ x11_get_authstring(void)
 #endif
 	f = popen(line, "r");
 	if (f == NULL) {
-		fprintf(stderr, "execution of '%s' failed, errno=%d \n",
-			command,
-			errno);
+		fprintf(stderr, "execution of '%s' failed, errno=%d \n", command, errno);
 	} else if (fgets(line, sizeof(line), f) == 0) {
-		fprintf(stderr, "cannot read data from '%s', errno=%d \n",
-			command,
-			errno);
+		fprintf(stderr, "cannot read data from '%s', errno=%d \n", command, errno);
 	} else if (sscanf(line, format,
 		protocol,
 		hexdata) != 2) {
-		fprintf(stderr, "cannot parse output from '%s'\n",
-			command);
+		fprintf(stderr, "cannot parse output from '%s'\n", command);
 	} else {
 		/* SUCCESS */
 		got_data = 1;
@@ -717,10 +706,9 @@ x11_get_authstring(void)
 		}
 	}
 
-	if (!got_data) {
+	if (!got_data)
 		/* FAILURE */
 		return NULL;
-	}
 
 	/**
 	 *  Allocate 4 additional bytes for the terminating NULL character for
@@ -761,11 +749,9 @@ exit_qsub(int exitstatus)
 	 */
 	EnterCriticalSection(&continuethread_cs);
 #endif
-	if (cs_init == 1) {
-
+	if (cs_init == 1)
 		/*cleanup security library initializations before exiting*/
 		CS_close_app();
-	}
 
 #ifdef BACKTRACE_SIZE
 	if (exitstatus != 0) {
@@ -2073,8 +2059,7 @@ interactive(void)
 		if (nsel == 0) {
 			/* connect to server, status job to see if still there */
 			if (! locate_job(new_jobname, server_out, cur_server)) {
-				fprintf(stderr, "qsub: job %s apparently deleted\n",
-					new_jobname);
+				fprintf(stderr, "qsub: job %s apparently deleted\n", new_jobname);
 				exit_qsub(1);
 			}
 		}
@@ -2358,12 +2343,12 @@ interactive(void)
 		/* Invoke remote viewer client only if the execution host is not same as submission host */
 		if(is_mom_local == 0) {
 			pbs_loadconf(0);
-			if(pbs_conf.pbs_conf_remote_viewer) { /* Invoke remote viewer client configured */
+			if(pbs_conf.pbs_conf_remote_viewer)
+				/* Invoke remote viewer client configured */
 				snprintf(rdp_command, PBS_CMDLINE_LENGTH -1, "%s %s", pbs_conf.pbs_conf_remote_viewer, remote_ip);
-			}
-			else { /* No remote viewer client configured, invoke native remote desktop client */
+			else
+				/* No remote viewer client configured, invoke native remote desktop client */
 				snprintf(rdp_command, PBS_CMDLINE_LENGTH -1, "mstsc /v %s", remote_ip);
-			}
 
 			hjob_remotesession = CreateJobObject(NULL, NULL);
 			si_rdp.lpDesktop = NULL;
@@ -2618,9 +2603,8 @@ retry:
 	 */
 
 #ifdef WIN32
-	if ((sig_happened == SIGINT) || (sig_happened == SIGBREAK)) {
+	if ((sig_happened == SIGINT) || (sig_happened == SIGBREAK))
 		exit_qsub(3);
-	}
 #endif
 
 	/* When Mom connects back, the first thing that needs
@@ -2749,8 +2733,7 @@ get_cred_from_cache(krb5_context context, krb5_ccache    cc, krb5_creds *creds,
 	kdcoptions = flags2options(tgt.ticket_flags)|
 		KDC_OPT_FORWARDED;
 
-	retval = krb5_get_cred_via_tkt(context, &tgt, kdcoptions,
-		addrs, creds, pcreds);
+	retval = krb5_get_cred_via_tkt(context, &tgt, kdcoptions, addrs, creds, pcreds);
 done:
 	krb5_free_cred_contents(context, &tgt);
 	return retval;
@@ -3038,12 +3021,10 @@ get_grid_proxy()
 		goto done;
 	}
 	if ((pcd->upkey = X509_get_pubkey(pcd->ucert)) == NULL) {
-		fprintf(stderr,
-			"%s: unable to load public key from proxy\n", __func__);
+		fprintf(stderr, "%s: unable to load public key from proxy\n", __func__);
 		goto done;
 	}
-	subject = X509_NAME_oneline(X509_get_subject_name(pcd->ucert),
-		NULL, 0);
+	subject = X509_NAME_oneline(X509_get_subject_name(pcd->ucert), NULL, 0);
 	principal = (char *)malloc(strlen(subject));
 	assert(principal != NULL);
 
@@ -3112,8 +3093,7 @@ get_grid_proxy()
 	cred_buf = malloc(cred_len);
 	assert(cred_buf != NULL);
 	if (read(fd, cred_buf, cred_len) != cred_len) {
-		fprintf(stderr, "%s: grid proxy read failed for %s\n",
-			__func__, proxy_file);
+		fprintf(stderr, "%s: grid proxy read failed for %s\n", __func__, proxy_file);
 		goto cleanup;
 	}
 	cred_type = PBS_CREDTYPE_GRIDPROXY;
@@ -3252,9 +3232,9 @@ process_opts(int argc, char **argv, int passet)
 		 * so, if "--" is used as a value, we need to make sure that
 		 * there is another "--" for providing the executable name (if any).
 		 */
-		if (optarg && (strcmp(optarg, "--") == 0)) {
+		if (optarg && (strcmp(optarg, "--") == 0))
 			ddash_index = optind - 1;
-		}
+
 		switch (c) {
 			case 'a':
 				if_cmd_line(a_opt) {
@@ -3459,9 +3439,8 @@ process_opts(int argc, char **argv, int passet)
 					}
 					if ((*optarg=='y')) {
 						roptarg_inter=TRUE;
-						if (Interact_opt) {
+						if (Interact_opt)
 							fprintf(stderr, "%s", reruninteract);
-						}
 					}
 					roptarg = *optarg;
 					set_attr(&attrib, ATTR_r, optarg);
@@ -3499,9 +3478,8 @@ process_opts(int argc, char **argv, int passet)
 					back2forward_slash(optarg);
 #endif
 					v_value = expand_varlist(optarg);
-					if (v_value == NULL) {
+					if (v_value == NULL)
 						exit(1);
-					}
 				}
 				break;
 			case 'V':
@@ -3741,11 +3719,10 @@ process_opts(int argc, char **argv, int passet)
 	 * an indicator that an executable name follows the "--".
 	 */
 	if (strcmp(argv[optind - 1], "--") == 0) {
-		if (ddash_index != optind - 1) {
+		if (ddash_index != optind - 1)
 			optind--;
-		} else {
+		else
 			errflg++;
-		}
 	}
 
 	if ((optind != 0) && (argc > 1) && (argv[optind] != NULL)) {
@@ -3835,7 +3812,8 @@ make_argv(int *argc, char *argv[], char *line)
 	}
 	if (c != l) {
 		len = c - l;
-		if (argv[*argc] != NULL) free(argv[*argc]);
+		if (argv[*argc] != NULL)
+			free(argv[*argc]);
 		argv[*argc] = (char *) malloc(len + 1);
 		if (argv[*argc] == NULL) {
 			fprintf(stderr, "qsub: out of memory\n");
@@ -3882,17 +3860,15 @@ do_dir(char *opts, int opt_pass, char *retmsg, int ret_size)
 	ret = process_opts(argc, vect, opt_pass);
 	if ((ret != 0) && (opt_pass != CMDLINE)) {
 		nxt_pos = snprintf(retmsg, max_size, "qsub: directive error: ");
-		if (nxt_pos < 0) {
+		if (nxt_pos < 0)
 			return (ret);
-		}
 		max_size = max_size - nxt_pos;
 		for (index = 1; index<argc; index++) {
 			/* +1 is added to strlen(vect[index]) to reserve space */
 			if ((max_size > 0) && (max_size > strlen(vect[index]) + 1)) {
 				len = snprintf(retmsg + nxt_pos, max_size, "%s ", vect[index]);
-				if (len < 0) {
+				if (len < 0)
 					break;
-				}
 				nxt_pos = nxt_pos + len;
 				max_size = max_size - len;
 			} else {
@@ -4271,18 +4247,16 @@ job_env_basic(void)
 				return NULL;
 			}
 			/* compare against "." */
-			if ((dev != statbuf.st_dev) || (ino != statbuf.st_ino)) {
+			if ((dev != statbuf.st_dev) || (ino != statbuf.st_ino))
 				/* "." and $PWD is different, cannot trust it */
 				c = NULL;
-			}
 		}
 	}
 
 	if (c == NULL) {
 		p = c = job_env + strlen(job_env);
-		if (getcwd(c, MAXPATHLEN) == NULL) {
+		if (getcwd(c, MAXPATHLEN) == NULL)
 			c = NULL;
-		}
 	} else
 		p = job_env + strlen(job_env);
 
@@ -4376,8 +4350,7 @@ env_array_to_varlist(char **envp)
 	len += len;     /* Double it for all the commas, etc. */
 
 	if ((job_env = (char *) malloc(len)) == NULL) {
-		fprintf(stderr,
-			"env_array_to_varlist: malloc failure errno=%d", errno);
+		fprintf(stderr, "env_array_to_varlist: malloc failure errno=%d", errno);
 		return NULL;
 	}
 
@@ -4434,9 +4407,8 @@ set_job_env(char *basic_vlist, char *current_vlist)
 
 	/* Calculate how big to make the variable string. */
 	len = 0;
-	if (v_opt) {
+	if (v_opt)
 		len += strlen(v_value);
-	}
 
 	if ((basic_vlist == NULL) || (basic_vlist[0] == '\0'))
 		return FALSE;
@@ -4499,7 +4471,8 @@ set_job_env(char *basic_vlist, char *current_vlist)
 				return FALSE;
 		}
 
-		if (l == ',') c++;
+		if (l == ',')
+			c++;
 		goto state1;
 		state4:         /* Value specified */
 
@@ -4521,23 +4494,22 @@ set_job_env(char *basic_vlist, char *current_vlist)
 #ifdef WIN32
 		back2forward_slash(c);
 #endif
-		if ((c = copy_env_value(job_env, c, 0)) == NULL) return FALSE;
+		if ((c = copy_env_value(job_env, c, 0)) == NULL)
+			return FALSE;
 
 		/* Have to undo here, since 'c' was incremented by copy_env_value */
-		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env)-1) == 0) {
+		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env)-1) == 0)
 			/* ignore PBS_O_ env variables as these are created by qsub */
 			*pc = '\0';
-		}
 
 		goto state1;
 	}
 
 final:
 
-	if (V_opt && (current_vlist != NULL) && (current_vlist[0] != '\0')) {
+	if (V_opt && (current_vlist != NULL) && (current_vlist[0] != '\0'))
 		/* Send every environment variable with the job. */
 		strcat(job_env, current_vlist);
-	}
 
 	set_attr(&attrib, ATTR_v, job_env);
 	free(job_env);
@@ -4853,7 +4825,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 #endif
 			}
 
-			if (! N_opt) set_attr(&attrib, ATTR_N, "STDIN");
+			if (! N_opt)
+				set_attr(&attrib, ATTR_N, "STDIN");
 			if (Interact_opt == FALSE) {
 				if ((errflg=get_script(stdin, script_tmp,
 					set_dir_prefix(dir_prefix, C_opt))) > 0) {
@@ -4936,10 +4909,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 			destination);
 		(void)unlink(script_tmp);
 		exit_qsub(2);
-	} else {
-		if (notNULL(s_n_out)) {
+	} else if (notNULL(s_n_out)) {
 			strcpy(server_out, s_n_out);
-		}
 	}
 
 	/* Get required environment variables to be sent to the server. */
@@ -4947,13 +4918,11 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	/* be sent to the qsub daemon if needed */
 
 	basic_envlist = job_env_basic();
-	if (basic_envlist == NULL) {
+	if (basic_envlist == NULL)
 		exit_qsub(3);
-	}
 
-	if (V_opt) {
+	if (V_opt)
 		qsub_envlist = env_array_to_varlist(envp);
-	}
 
 	/*
 	 * Disable backgrounding if we are inside another qsub
@@ -5174,9 +5143,8 @@ regular_submit:
 		if (rc == 0) {
 			if (sd_svr != -1) {
 #if defined(PBS_PASS_CREDENTIALS)
-				if (passwd_buf[0] != '\0') {
+				if (passwd_buf[0] != '\0')
 					pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
-				}
 #endif
 				rc = do_submit2(retmsg);
 			}
@@ -5388,9 +5356,8 @@ do_daemon_stuff(char *file, char *handle, char *server)
 			goto error;
 
 #if defined(PBS_PASS_CREDENTIALS)
-		if (passwd_buf[0] != '\0') {
+		if (passwd_buf[0] != '\0')
 			pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_len, &cred_buf);
-		}
 #endif
 		/* set the current work directory by doing a chdir */
 		if (_chdir(qsub_cwd) != 0)
@@ -5831,11 +5798,10 @@ do_connect(char *server_out, char *retmsg)
 	}
 
 	/* Connect to the server */
-	if ((Interact_opt == FALSE) && (block_opt == FALSE)) {
+	if ((Interact_opt == FALSE) && (block_opt == FALSE))
 		sd_svr = cnt2server_extend(server_out, QSUB_DAEMON);
-	} else {
+	else
 		sd_svr = cnt2server(server_out);
-	}
 
 	if (sd_svr <= 0) {
 		sprintf(retmsg, "qsub: cannot connect to server %s (errno=%d)\n",
@@ -5892,31 +5858,25 @@ do_submit(char *retmsg)
 		 */
 		for (retries = 2; retries > 0; retries--) {
 			rc = do_dir(dfltqsubargs, CMDLINE - 2, retmsg, MAXPATHLEN);
-			if (rc >= 0) {
+			if (rc >= 0)
 				break;
-			}
-			if (retries == 2) {
+			if (retries == 2)
 				refresh_dfltqsubargs();
-			}
 		}
-		if (rc != 0) {
+		if (rc != 0)
 			return (rc);
-		}
 	}
 
 	/* set_job_env must be done here to pick up -v, -V options passed */
 	/* by default_qsub_arguments */
 	if (! set_job_env(basic_envlist, qsub_envlist)) {
 #ifndef WIN32
-		if (x11_disp) {
-			snprintf(retmsg, MAXPATHLEN,
-				"qsub: invalid usage of incompatible option –X with –v DISPLAY\n");
-		} else {
+		if (x11_disp)
+			snprintf(retmsg, MAXPATHLEN, "qsub: invalid usage of incompatible option –X with –v DISPLAY\n");
+		else
 			snprintf(retmsg, MAXPATHLEN, "qsub: cannot send environment with the job\n");
-		}
 #else
-		snprintf(retmsg, MAXPATHLEN,
-			"qsub: cannot send environment with the job\n");
+		snprintf(retmsg, MAXPATHLEN, "qsub: cannot send environment with the job\n");
 #endif
 		return 1;
 	}
@@ -6067,7 +6027,6 @@ restore_opts()
 	block_opt = block_opt_o;
 	relnodes_on_stageout_opt = relnodes_on_stageout_opt_o;
 	P_opt = P_opt_o;
-
 }
 
 /**
