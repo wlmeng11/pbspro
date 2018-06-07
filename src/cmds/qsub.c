@@ -4699,6 +4699,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	sigset_t newsigmask;
 #endif
 
+/* Set signal handlers */
 #ifdef WIN32
 	signal(SIGINT, win_blockint);
 	signal(SIGBREAK, win_blockint);
@@ -4717,8 +4718,10 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	}
 #endif
 
-	/*test for real deal or just version and exit*/
-
+	/*
+	 * Print version info and exit, if specified with --version option.
+	 * Otherwise, proceed normally.
+	 */
 	execution_mode(argc, argv);
 
 	/*
@@ -4774,6 +4777,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		exit_qsub  (2);
 	}
 
+	/* Process special arguments */
 	if (optind < argc) {
 		if (strcmp(argv[optind], "--") == 0) {
 			command_flag = 1;
@@ -4809,6 +4813,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	back2forward_slash(script);
 #endif
 
+	/* Read the job script from a file or stdin */
 	if (command_flag == 0) {
 		/* if script is empty, get standard input */
 		if ((strcmp(script, "") == 0) || (strcmp(script, "-") == 0)) {
@@ -4869,7 +4874,9 @@ main(int argc, char **argv, char **envp)   /* qsub */
 			}
 		}
 	}
-#ifndef WIN32
+
+/* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
+#ifndef WIN32 /* Unix */
 	if (Forwardx11_opt) {
 		if (!Interact_opt) {
 			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
@@ -4887,7 +4894,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 			exit_qsub(1);
 		}
 	}
-#else
+#else /* Windows */
 	if (gui_opt) {
 		if (!Interact_opt) {
 			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
@@ -4896,7 +4903,10 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		set_attr(&attrib, ATTR_GUI, "TRUE");
 	}
 #endif
+
 	set_opt_defaults();		/* set option default values */
+
+	/* Parse destination string */
 	server_out[0] = '\0';
 	if (parse_destination_id(destination, &q_n_out, &s_n_out)) {
 		fprintf(stderr, "qsub: illegally formed destination: %s\n", destination);
@@ -5150,9 +5160,10 @@ regular_submit:
 #endif
 	}
 
+	/* remove temporary job script file */
 	(void)unlink(script_tmp);
 
-	if (rc == 0) {
+	if (rc == 0) { /* submit was successful */
 		new_jobname = retmsg;
 
 		if (!z_opt && Interact_opt == FALSE)
@@ -5172,14 +5183,14 @@ regular_submit:
 	/* is this an interactive job ??? */
 	if (Interact_opt != FALSE)
 		interactive();
-	else if (block_opt) {
+	else if (block_opt) { /* block until job completes? */
 		fflush(stdout);
 		block();
 	}
 
 	exit_qsub(0);
 	return (0);
-}
+} /* end of main() */
 
 #ifdef WIN32
 
