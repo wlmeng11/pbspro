@@ -4677,16 +4677,35 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
 
 /* Try to submit via daemon */
 #ifdef WIN32
+/*
+ * @brief
+ *  Try to submit job through daemon. On Windows, the daemon would be created
+ *  by calling CreateProcess with the --daemon parameter during a prior
+ *  invocation of the qsub command. The foreground qsub process tries to send
+ *  the job to the daemon using a named pipe.
+ *
+ * @param[in]  qsub_exe          - Name of the qsub command to pass to CreateProcess
+ * @param[out] do_regular_submit - Indicate whether to do regular submit
+ * @return     rc                - Error code
+ */
 int daemon_submit_windows(const char *qsub_exe, int *do_regular_submit) {
 }
 #else
 /*
+ * @brief
+ *  Try to submit job through daemon. On Unix, the daemon would be created by
+ *  forking during a prior invocation of the qsub command. The foregound qsub
+ *  process tries to send the job to the daemon using Unix domain sockets.
+ *
+ * @param[out] daemon_up         - Indicate whether daemon is running
+ * @param[out] do_regular_submit - Indicate whether to do regular submit
+ * @return     rc                - Error code
  */
 int daemon_submit_unix(int *daemon_up, int *do_regular_submit) {
 	int    sock; /* UNIX domain socket for talking to daemon */
 	struct sockaddr_un   s_un;
 	sigset_t newsigmask;
-	int rc = -1; // TODO: what should the default value be?
+	int rc = 0;
 again:
 	/*
 	 * In case of Unix, use fork. Foreground checks if connection is
