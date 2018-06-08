@@ -4684,7 +4684,7 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
  * @param[out] do_regular_submit - Indicate whether to do regular submit
  * @return     rc                - Error code
  */
-int daemon_submit_windows(const char *qsub_exe, int *do_regular_submit) {
+int daemon_submit(const char *qsub_exe, int *do_regular_submit) {
 	int rc = 0;
 	/* determine pipe name */
 	get_comm_filename(fl);
@@ -4809,7 +4809,7 @@ again:
  * @param[out] do_regular_submit - Indicate whether to do regular submit
  * @return     rc                - Error code
  */
-int daemon_submit_unix(int *daemon_up, int *do_regular_submit) {
+int daemon_submit(int *daemon_up, int *do_regular_submit) {
 	int    sock; /* UNIX domain socket for talking to daemon */
 	struct sockaddr_un   s_un;
 	sigset_t newsigmask;
@@ -5169,9 +5169,9 @@ main(int argc, char **argv, char **envp)   /* qsub */
 
 	/* Try to submit jobs using a daemon */
 #ifdef WIN32
-	rc = daemon_submit_windows(qsub_exe, &do_regular_submit);
+	rc = daemon_submit(qsub_exe, &do_regular_submit);
 #else
-	rc = daemon_submit_unix(&daemon_up, &do_regular_submit);
+	rc = daemon_submit(&daemon_up, &do_regular_submit);
 #endif
 
 regular_submit:
