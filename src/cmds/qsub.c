@@ -5192,21 +5192,20 @@ main(int argc, char **argv, char **envp)   /* qsub */
 
 	/*
 	 * In case of interactive jobs, jobs with block=true, or no_background == 1,
-	 * qsub should fully execute from the foreground.
+	 * qsub should fully execute from the foreground, so daemon_submit() is not called.
 	 * It should not fork, neither should it send the data to the background qsub.
+	 *
+	 * If all 3 options are zero, then call daemon_submit().
 	 */
-	if (Interact_opt || block_opt || no_background)
-		goto regular_submit;
-
-
-	/* Try to submit jobs using a daemon */
+	if ((Interact_opt || block_opt || no_background) == 0) {
+		/* Try to submit jobs using a daemon */
 #ifdef WIN32
-	rc = daemon_submit(qsub_exe, &do_regular_submit);
+		rc = daemon_submit(qsub_exe, &do_regular_submit);
 #else
-	rc = daemon_submit(&daemon_up, &do_regular_submit);
+		rc = daemon_submit(&daemon_up, &do_regular_submit);
 #endif
+	}
 
-regular_submit:
 	if (do_regular_submit == 1) { /* submission via daemon was not successful, so do regular submit */
 		rc = regular_submit(daemon_up);
 	}
@@ -5605,7 +5604,7 @@ get_comm_filename(char *fl)
  *	The do_daemon_stuff Unix counterpart.
  *	It creates a unix domain socket server and starts listening on it.
  *	The umask is set to 077 so that the domain socket file is owned and
- *	accessible by the user exeuting qsub only. Once a client (foreground
+ *	accessible by the user executing qsub only. Once a client (foreground
  *	qsub) connects, it receives all the data from the foreground qsub and
  *	executes do_submit, on the pre-established connection to pbs_server.
  *	The connection to server was estiblished by the caller of this function
@@ -5613,7 +5612,7 @@ get_comm_filename(char *fl)
  *	This function also does a "select" wait on input of data from foreground
  *	qsub processes, and a close notification on the socket with pbs_server.
  *	The select breaks if foreground qsubs connect, the pbs_server dies, or
- *	the timeout of 1 minutes expires. For the later two cases, this function
+ *	the timeout of 1 minutes expires. For the latter two cases, this function
  *	does a silent exit of the background qsub daemon.
  *
  */
@@ -5883,7 +5882,7 @@ do_connect(char *server_out, char *retmsg)
 
 /**
  * @brief
- *	This functions does a job submission ot the server using the global
+ *	This functions does a job submission to the server using the global
  *	connected server socket sd_svr.
  *
  * @param[out] retmsg	 - Any error string is returned in this parameter
