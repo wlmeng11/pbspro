@@ -4675,6 +4675,104 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
 	return 0;
 }
 
+/* Try to submit via daemon */
+#ifdef WIN32
+int daemon_submit_windows(const char *qsub_exe, int *do_regular_submit) {
+}
+#else
+/*
+ */
+int daemon_submit_unix(int *daemon_up, int *do_regular_submit) {
+	int    sock; /* UNIX domain socket for talking to daemon */
+	struct sockaddr_un   s_un;
+	sigset_t newsigmask;
+	int rc = -1; // TODO: what should the default value be?
+again:
+	/*
+	 * In case of Unix, use fork. Foreground checks if connection is
+	 * possible with background daemon. The communication used is unix
+	 * domain sockets. Only the specified user can connect to this socket
+	 * since the domain socket is created with a 0600 permission.
+	 *
+	 * If connection fails, proceed with qsub in the normal flow, and at
+	 * the end fork and stay in the background, while the foreground
+	 * process returns control to the shell. Subsequent qsubs will be able
+	 * to connect to this forked background qsub.
+	 *
+	 */
+	*daemon_up = check_qsub_daemon(fl);
+	if (*daemon_up == 1) {
+		/* pass information to daemon */
+		/* wait for job-id or error string */
+		if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+			return rc;
+
+		s_un.sun_family = AF_UNIX;
+		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
+		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
+			int	refused = (errno == ECONNREFUSED);
+
+			close(sock);
+			if (refused) {
+				/* daemon unavailable, del temp file, restart */
+				if (unlink(fl) != 0)
+					return rc;
+
+				goto again;
+			}
+			return rc;
+		}
+
+		/* block SIGPIPE on write() failures. */
+		sigemptyset(&newsigmask);
+		sigaddset(&newsigmask, SIGPIPE);
+		sigprocmask(SIG_BLOCK, &newsigmask, NULL);
+
+		if ((send_attrl(&sock, attrib) == 0) &&
+			(send_string(&sock, destination) == 0) &&
+			(send_string(&sock, script_tmp) == 0) &&
+			(send_string(&sock, cred_name) == 0) &&
+#if defined(PBS_PASS_CREDENTIALS)
+			(send_string(&sock, passwd_buf) == 0) &&
+#endif
+			(send_string(&sock, v_value?v_value:"") == 0) &&
+			(send_string(&sock, basic_envlist) == 0) &&
+			(send_string(&sock, qsub_envlist?qsub_envlist:"") == 0) &&
+			(send_string(&sock, qsub_cwd) == 0) &&
+			(send_opts(&sock) == 0)) {
+
+			/* read back the first error code from the background
+			 * which confirms whether the background received our data
+			 */
+			if (dorecv(&sock, (char *) &rc, sizeof(int)) == 0) {
+				/*
+				 * we were able to send data to the background daemon.
+				 * Now, even if we fail to read back response from
+				 * background, we do not want to submit again.
+				 */
+				*do_regular_submit = 0;
+			}
+
+			/* read back response from background daemon */
+			if ((recv_string(&sock, retmsg) != 0) ||
+				dorecv(&sock, (char *) &rc, sizeof(int)) != 0) {
+
+				/* Something bad happened, either background submitted
+				 * and failed to send us response, or it failed before
+				 * submitting.
+				 */
+				rc = -1;
+				sprintf(retmsg, "Failed to recv data from background qsub\n");
+				/* fall through to print the error message */
+			}
+		}
+		/* going down, no need to free stuff */
+		close(sock);
+	}
+	return rc;
+}
+#endif
+
 
 int
 main(int argc, char **argv, char **envp)   /* qsub */
@@ -4691,16 +4789,13 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	char *cmdargs = NULL;
 	int command_flag = 0;
 	char *arg_list = NULL;
-	int rc;
+	int rc; /* error code for submit */
 	char qsub_exe[MAXPATHLEN+1];
 	int do_regular_submit = 1; /* used if daemon based submit fails */
 	char *x11authstr = NULL;
 #ifndef WIN32
 	int daemon_up = 0;
-	int    sock;
-	struct sockaddr_un   s_un;
 	struct sigaction act;
-	sigset_t newsigmask;
 #endif
 
 /* Set signal handlers */
@@ -5060,88 +5155,7 @@ again:
 	}
 
 #else
-again:
-	/*
-	 * In case of Unix, use fork. Foreground checks if connection is
-	 * possible with background daemon. The communication used is unix
-	 * domain sockets. Only the specified user can connect to this socket
-	 * since the domain socket is created with a 0600 permission.
-	 *
-	 * If connection fails, proceed with qsub in the normal flow, and at
-	 * the end fork and stay in the background, while the foreground
-	 * process returns control to the shell. Subsequent qsubs will be able
-	 * to connect to this forked background qsub.
-	 *
-	 */
-	daemon_up = check_qsub_daemon(fl);
-	if (daemon_up == 1) {
-		/* pass information to daemon */
-		/* wait for job-id or error string */
-		if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-			goto regular_submit;
-
-		s_un.sun_family = AF_UNIX;
-		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
-		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
-			int	refused = (errno == ECONNREFUSED);
-
-			close(sock);
-			if (refused) {
-				/* daemon unavailable, del temp file, restart */
-				if (unlink(fl) != 0)
-					goto regular_submit;
-
-				goto again;
-			}
-			goto regular_submit;
-		}
-
-		/* block SIGPIPE on write() failures. */
-		sigemptyset(&newsigmask);
-		sigaddset(&newsigmask, SIGPIPE);
-		sigprocmask(SIG_BLOCK, &newsigmask, NULL);
-
-		if ((send_attrl(&sock, attrib) == 0) &&
-			(send_string(&sock, destination) == 0) &&
-			(send_string(&sock, script_tmp) == 0) &&
-			(send_string(&sock, cred_name) == 0) &&
-#if defined(PBS_PASS_CREDENTIALS)
-			(send_string(&sock, passwd_buf) == 0) &&
-#endif
-			(send_string(&sock, v_value?v_value:"") == 0) &&
-			(send_string(&sock, basic_envlist) == 0) &&
-			(send_string(&sock, qsub_envlist?qsub_envlist:"") == 0) &&
-			(send_string(&sock, qsub_cwd) == 0) &&
-			(send_opts(&sock) == 0)) {
-
-			/* read back the first error code from the background
-			 * which confirms whether the background received our data
-			 */
-			if (dorecv(&sock, (char *) &rc, sizeof(int)) == 0) {
-				/*
-				 * we were able to send data to the background daemon.
-				 * Now, even if we fail to read back response from
-				 * background, we do not want to submit again.
-				 */
-				do_regular_submit = 0;
-			}
-
-			/* read back response from background daemon */
-			if ((recv_string(&sock, retmsg) != 0) ||
-				dorecv(&sock, (char *) &rc, sizeof(int)) != 0) {
-
-				/* Something bad happened, either background submitted
-				 * and failed to send us response, or it failed before
-				 * submitting.
-				 */
-				rc = -1;
-				sprintf(retmsg, "Failed to recv data from background qsub\n");
-				/* fall through to print the error message */
-			}
-		}
-		/* going down, no need to free stuff */
-		close(sock);
-	}
+	rc = daemon_submit_unix(&daemon_up, &do_regular_submit);
 #endif
 
 regular_submit:
@@ -5175,9 +5189,6 @@ regular_submit:
 	} else {
 		/* error, print whatever our daemon gave us back */
 		fprintf(stderr, "%s", retmsg);
-	}
-
-	if (rc != 0) {
 		/* check if the retmsg has "qsub: illegal -" string, if so print usage */
 		if (strstr(retmsg, "qsub: illegal -"))
 			print_usage();
