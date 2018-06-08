@@ -4687,7 +4687,7 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
  * @param[out] do_regular_submit - Indicate whether to do regular submit
  * @return     rc                - Error code
  */
-int
+static int
 daemon_submit(const char *qsub_exe, int *do_regular_submit)
 {
 	int rc = 0;
@@ -4814,7 +4814,7 @@ again:
  * @param[out] do_regular_submit - Indicate whether to do regular submit
  * @return     rc                - Error code
  */
-int
+static int
 daemon_submit(int *daemon_up, int *do_regular_submit)
 {
 	int    sock; /* UNIX domain socket for talking to daemon */
@@ -4914,7 +4914,7 @@ again:
  * @param[in] daemon_up - Indicates whether daemon is running
  * @return    rc        - Error code
  */
-int
+static int
 regular_submit(const int daemon_up)
 {
 	int rc = 0;
