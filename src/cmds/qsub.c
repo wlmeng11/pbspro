@@ -4757,6 +4757,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		exit(0);
 	}
 #endif
+
 	strcpy(qsub_exe, argv[0]); /* note the name of the qsub executable */
 
 	/*
@@ -4770,8 +4771,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		cmdargs = NULL;
 	}
 
+	/* Process arguments */
 	errflg = process_opts(argc, argv, CMDLINE);  /* get cmd-line options */
-
 	if (errflg) {
 		print_usage();
 		exit_qsub  (2);
@@ -4919,11 +4920,9 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	/* Get required environment variables to be sent to the server. */
 	/* Must be done early here, as basic_envlist and qsub_envlist will */
 	/* be sent to the qsub daemon if needed */
-
 	basic_envlist = job_env_basic();
 	if (basic_envlist == NULL)
 		exit_qsub(3);
-
 	if (V_opt)
 		qsub_envlist = env_array_to_varlist(envp);
 
@@ -4940,6 +4939,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	 */
 	if (Interact_opt || block_opt || no_background)
 		goto regular_submit;
+
 
 #ifdef WIN32
 	/* determine pipe name */
