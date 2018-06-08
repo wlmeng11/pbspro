@@ -4685,6 +4685,118 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
  * @return     rc                - Error code
  */
 int daemon_submit_windows(const char *qsub_exe, int *do_regular_submit) {
+	int rc = 0;
+	/* determine pipe name */
+	get_comm_filename(fl);
+
+	/*
+	 * we have determined the name of the Named pipe that should be
+	 * used to communicate between the qsub background and foreground
+	 * process. Now try to connect to the background qsub process using this
+	 * named pipe.
+	 *
+	 * If the connection succeeds, it means a background qsub process
+	 * already exists. Send data to the background process and wait for
+	 * result.
+	 *
+	 * If connection fails, create a background qsub process by doing
+	 * a createprocess of the same qsub executable, but with --daemon
+	 * parameter. Now, there could be a race between the background and the
+	 * foreground qsub processes. If the background process is slower to
+	 * startup and listen on the named pipe, the foreground process could
+	 * fail again on trying to connect to it, thus entering a vicious loop.
+	 * To avoid that, create a manual reset event and pass its handle to
+	 * the new child process. The foreground process waits on the event
+	 * object, till the background process is up, sets up the named pipe,
+	 * and signals this event to tell the foreground process to continue
+	 * and  try to connect to it via this new named pipe.
+	 */
+	HANDLE hFile;
+	SECURITY_ATTRIBUTES sa;
+	STARTUPINFO si = {sizeof(si)};
+	PROCESS_INFORMATION pi;
+	char cmd_line[2*MAXPATHLEN + 1];
+	int created = 0;
+	HANDLE hEvent;
+
+again:
+	hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+			OPEN_EXISTING, 0, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) {
+		if (created == 0) {
+			sa.nLength = sizeof(sa);
+			sa.lpSecurityDescriptor = NULL;
+			sa.bInheritHandle = TRUE;
+
+			/* now create a named event to wait on later */
+			hEvent = CreateEvent(
+					&sa, /* default security attribute */
+					TRUE, /* manual-reset event */
+					FALSE, /* initial state = signaled */
+					NULL); /* unnamed event object */
+			if (hEvent == NULL)
+				return rc;
+
+			/* launch new qsub process, connect 2 server */
+			sa.bInheritHandle = FALSE;
+			sprintf(cmd_line, "%s --daemon %s %d %s",
+					qsub_exe, fl,
+					hEvent, server_out);
+			if (!CreateProcess(NULL, cmd_line, &sa, &sa,
+						TRUE, CREATE_NO_WINDOW, NULL,
+						NULL, &si, &pi)) {
+				CloseHandle(hEvent);
+				return rc;
+			}
+
+			/* now wait for single object */
+			/* foreground process wait a max 10 seconds */
+			rc = WaitForSingleObject(hEvent, 10 * 1000);
+			CloseHandle(hEvent);
+
+			if (rc != WAIT_OBJECT_0) /* timeout */
+				return rc;
+
+			created = 1;
+			goto again;
+		}
+	} else {
+		if ((send_attrl(hFile, attrib) == 0) &&
+				(send_string(hFile, destination) == 0) &&
+				(send_string(hFile, script_tmp) == 0) &&
+				(send_string(hFile, cred_name) == 0) &&
+#if defined(PBS_PASS_CREDENTIALS)
+				(send_string(hFile, passwd_buf) == 0) &&
+#endif
+				(send_string(hFile, v_value?v_value:"") == 0) &&
+				(send_string(hFile, basic_envlist) == 0) &&
+				(send_string(hFile, qsub_envlist?qsub_envlist:"") == 0) &&
+				(send_string(hFile, qsub_cwd) == 0) &&
+				(send_opts(hFile) == 0)) {
+			/*
+			 * we were able to send data to the background qsub.
+			 * Now, even if we fail to read back response from
+			 * background, we do not want to submit again.
+			 */
+			*do_regular_submit = 0;
+
+			/* read back response from background qsub */
+			if ((recv_string(hFile, retmsg) != 0) ||
+					(dorecv(hFile, &rc, sizeof(int)) != 0)) {
+
+				/* Something bad happened, either background submitted
+				 * and failed to send us response, or it failed before
+				 * submitting.
+				 */
+				rc = -1;
+				sprintf(retmsg, "Failed to recv data from background qsub\n");
+				/* fall through to print the error message */
+			}
+		}
+		FlushFileBuffers(hFile);
+		CloseHandle(hFile);
+	}
+	return rc;
 }
 #else
 /*
@@ -5055,120 +5167,9 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		goto regular_submit;
 
 
+	/* Try to submit jobs using a daemon */
 #ifdef WIN32
-	/* determine pipe name */
-	get_comm_filename(fl);
-
-	/*
-	 * we have determined the name of the Named pipe that should be
-	 * used to communicate between the qsub background and foreground
-	 * process. Now try to connect to the background qsub process using this
-	 * named pipe.
-	 *
-	 * If the connection succeeds, it means a background qsub process
-	 * already exists. Send data to the background process and wait for
-	 * result.
-	 *
-	 * If connection fails, create a background qsub process by doing
-	 * a createprocess of the same qsub executable, but with --daemon
-	 * parameter. Now, there could be a race between the background and the
-	 * foreground qsub processes. If the background process is slower to
-	 * startup and listen on the named pipe, the foreground process could
-	 * fail again on trying to connect to it, thus entering a vicious loop.
-	 * To avoid that, create a manual reset event and pass its handle to
-	 * the new child process. The foreground process waits on the event
-	 * object, till the background process is up, sets up the named pipe,
-	 * and signals this event to tell the foreground process to continue
-	 * and  try to connect to it via this new named pipe.
-	 */
-	{
-		HANDLE hFile;
-		SECURITY_ATTRIBUTES sa;
-		STARTUPINFO si = {sizeof(si)};
-		PROCESS_INFORMATION pi;
-		char cmd_line[2*MAXPATHLEN + 1];
-		int created = 0;
-		HANDLE hEvent;
-
-again:
-		hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-			OPEN_EXISTING, 0, NULL);
-		if (hFile == INVALID_HANDLE_VALUE) {
-			if (created == 0) {
-				sa.nLength = sizeof(sa);
-				sa.lpSecurityDescriptor = NULL;
-				sa.bInheritHandle = TRUE;
-
-				/* now create a named event to wait on later */
-				hEvent = CreateEvent(
-					&sa, /* default security attribute */
-					TRUE, /* manual-reset event */
-					FALSE, /* initial state = signaled */
-					NULL); /* unnamed event object */
-				if (hEvent == NULL)
-					goto regular_submit;
-
-				/* launch new qsub process, connect 2 server */
-				sa.bInheritHandle = FALSE;
-				sprintf(cmd_line, "%s --daemon %s %d %s",
-					qsub_exe, fl,
-					hEvent, server_out);
-				if (!CreateProcess(NULL, cmd_line, &sa, &sa,
-					TRUE, CREATE_NO_WINDOW, NULL,
-					NULL, &si, &pi)) {
-					CloseHandle(hEvent);
-					goto regular_submit;
-				}
-
-				/* now wait for single object */
-				/* foreground process wait a max 10 seconds */
-				rc = WaitForSingleObject(hEvent, 10 * 1000);
-				CloseHandle(hEvent);
-
-				if (rc != WAIT_OBJECT_0)
-					goto regular_submit; /* timeout */
-
-				created = 1;
-				goto again;
-			}
-		} else {
-			if ((send_attrl(hFile, attrib) == 0) &&
-				(send_string(hFile, destination) == 0) &&
-				(send_string(hFile, script_tmp) == 0) &&
-				(send_string(hFile, cred_name) == 0) &&
-#if defined(PBS_PASS_CREDENTIALS)
-				(send_string(hFile, passwd_buf) == 0) &&
-#endif
-				(send_string(hFile, v_value?v_value:"") == 0) &&
-				(send_string(hFile, basic_envlist) == 0) &&
-				(send_string(hFile, qsub_envlist?qsub_envlist:"") == 0) &&
-				(send_string(hFile, qsub_cwd) == 0) &&
-				(send_opts(hFile) == 0)) {
-				/*
-				 * we were able to send data to the background qsub.
-				 * Now, even if we fail to read back response from
-				 * background, we do not want to submit again.
-				 */
-				do_regular_submit = 0;
-
-				/* read back response from background qsub */
-				if ((recv_string(hFile, retmsg) != 0) ||
-					(dorecv(hFile, &rc, sizeof(int)) != 0)) {
-
-					/* Something bad happened, either background submitted
-					 * and failed to send us response, or it failed before
-					 * submitting.
-					 */
-					rc = -1;
-					sprintf(retmsg, "Failed to recv data from background qsub\n");
-					/* fall through to print the error message */
-				}
-			}
-			FlushFileBuffers(hFile);
-			CloseHandle(hFile);
-		}
-	}
-
+	rc = daemon_submit_windows(qsub_exe, &do_regular_submit);
 #else
 	rc = daemon_submit_unix(&daemon_up, &do_regular_submit);
 #endif
