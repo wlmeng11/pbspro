@@ -4904,6 +4904,33 @@ again:
 }
 #endif
 
+/*
+ * @brief
+ *  Perform a regular submit, without the daemon.
+ *
+ * @param[in] daemon_up - Indicates whether daemon is running
+ * @return    rc        - Error code
+ */
+int regular_submit(const int daemon_up) {
+	int rc = 0;
+	rc = do_connect(server_out, retmsg);
+	if (rc == 0) {
+		if (sd_svr != -1) {
+#if defined(PBS_PASS_CREDENTIALS)
+			if (passwd_buf[0] != '\0')
+				pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
+#endif
+			rc = do_submit2(retmsg);
+		}
+		else
+			rc = -1;
+	}
+#ifndef WIN32
+	if ((rc == 0) && !(Interact_opt != FALSE || block_opt) && (daemon_up == 0) && (no_background == 0))
+		fork_and_stay();
+#endif
+	return rc;
+}
 
 int
 main(int argc, char **argv, char **envp)   /* qsub */
@@ -5180,22 +5207,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 
 regular_submit:
 	if (do_regular_submit == 1) { /* submission via daemon was not successful, so do regular submit */
-		rc = do_connect(server_out, retmsg);
-		if (rc == 0) {
-			if (sd_svr != -1) {
-#if defined(PBS_PASS_CREDENTIALS)
-				if (passwd_buf[0] != '\0')
-					pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
-#endif
-				rc = do_submit2(retmsg);
-			}
-			else
-				rc = -1;
-		}
-#ifndef WIN32
-		if ((rc == 0) && !(Interact_opt != FALSE || block_opt) && (daemon_up == 0) && (no_background == 0))
-			fork_and_stay();
-#endif
+		rc = regular_submit(daemon_up);
 	}
 
 	/* remove temporary job script file */
