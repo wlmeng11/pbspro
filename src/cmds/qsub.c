@@ -3756,6 +3756,47 @@ process_opts(int argc, char **argv, int passet)
 	return (errflg);
 }
 
+/*
+ * @brief
+ *  Process special options.
+ *  TODO
+ *
+ * @param[out] script       - TODO
+ * @return     command_flag - TODO
+ */
+int
+process_special_opts(int argc, char **argv, char *script)
+{
+	int command_flag = 0;
+	char *arg_list = NULL;
+	if (optind < argc) {
+		if (strcmp(argv[optind], "--") == 0) {
+			command_flag = 1;
+			/* set executable */
+			set_attr(&attrib, ATTR_executable, argv[optind + 1]);
+			if (argc > (optind + 2)) {
+				/* user has specified arguments to executable as well. */
+				arg_list = encode_xml_arg_list(optind + 2, argc, argv);
+				if (arg_list == NULL) {
+					fprintf(stderr, "qsub: out of memory\n");
+					exit_qsub(2);
+				} else {
+					/* set argument list */
+					set_attr(&attrib, ATTR_Arglist, arg_list);
+					free(arg_list);
+					arg_list = NULL;
+				}
+			}
+			if (!N_opt)	/* '-N' is not set */
+				set_attr(&attrib, ATTR_N, "STDIN");
+		} else {
+			strncpy(script, argv[optind], MAXPATHLEN);
+			script[MAXPATHLEN] = '\0';
+		}
+	}
+	return command_flag;
+}
+
 /**
  * @brief
  * 	processes and creates arguments passed for qsub
@@ -4947,7 +4988,6 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	struct stat statbuf;
 	char *cmdargs = NULL;
 	int command_flag = 0;
-	char *arg_list = NULL;
 	int rc; /* error code for submit */
 	char qsub_exe[MAXPATHLEN+1];
 	int do_regular_submit = 1; /* used if daemon based submit fails */
@@ -5035,38 +5075,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		print_usage();
 		exit_qsub  (2);
 	}
-
-	/* Process special arguments */
-	if (optind < argc) {
-		if (strcmp(argv[optind], "--") == 0) {
-			command_flag = 1;
-			/* set executable */
-			set_attr(&attrib, ATTR_executable, argv[optind + 1]);
-			if (argc > (optind + 2)) {
-				/*
-				 * user has specified arguments to executable
-				 * as well.
-				 */
-				arg_list = encode_xml_arg_list(optind + 2,
-					argc, argv);
-				if (arg_list == NULL) {
-					fprintf(stderr, "qsub: out of memory\n");
-					exit_qsub(2);
-				} else {
-					/* set argument list */
-					set_attr(&attrib, ATTR_Arglist,
-						arg_list);
-					free(arg_list);
-					arg_list = NULL;
-				}
-			}
-			if (!N_opt)	/* '-N' is not set */
-				set_attr(&attrib, ATTR_N, "STDIN");
-		} else {
-			strncpy(script, argv[optind], MAXPATHLEN);
-			script[MAXPATHLEN] = '\0';
-		}
-	}
+	command_flag = process_special_opts(argc, argv, script);
 
 #ifdef WIN32
 	back2forward_slash(script);
