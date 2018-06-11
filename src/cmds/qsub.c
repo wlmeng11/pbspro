@@ -4135,6 +4135,42 @@ read_job_script(char * const script)
 
 /**
  * @brief
+*  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified
+ */
+static void
+enable_gui(void)
+{
+#ifndef WIN32 /* Unix */
+	char *x11authstr = NULL;
+	if (Forwardx11_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
+			exit_qsub(1);
+		}
+		/* get the DISPLAY's auth protocol, hexdata, and screen number */
+		if ((x11authstr = x11_get_authstring()) != NULL) {
+			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
+			set_attr(&attrib, ATTR_X11_port, port_X11());
+#ifdef DEBUG
+			fprintf(stderr, "x11auth string: %s\n", x11authstr);
+#endif
+		} else {
+			exit_qsub(1);
+		}
+	}
+#else /* Windows */
+	if (gui_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
+			exit_qsub(1);
+		}
+		set_attr(&attrib, ATTR_GUI, "TRUE");
+	}
+#endif
+}
+
+/**
+ * @brief
  *      Copy an environment variable to a specified location
  *
  * @param[in]	dest	- The destination address
@@ -5068,7 +5104,6 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	int rc; /* error code for submit */
 	char qsub_exe[MAXPATHLEN+1];
 	int do_regular_submit = 1; /* used if daemon based submit fails */
-	char *x11authstr = NULL;
 #ifndef WIN32
 	int daemon_up = 0;
 	struct sigaction act;
@@ -5163,36 +5198,11 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		/* Read the job script from a file or stdin */
 		read_job_script(script);
 
-/* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
-#ifndef WIN32 /* Unix */
-	if (Forwardx11_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
-			exit_qsub(1);
-		}
-		/* get the DISPLAY's auth protocol, hexdata, and screen number */
-		if ((x11authstr = x11_get_authstring()) != NULL) {
-			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
-			set_attr(&attrib, ATTR_X11_port, port_X11());
-#ifdef DEBUG
-			fprintf(stderr, "x11auth string: %s\n", x11authstr);
-#endif
-		}
-		else {
-			exit_qsub(1);
-		}
-	}
-#else /* Windows */
-	if (gui_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
-			exit_qsub(1);
-		}
-		set_attr(&attrib, ATTR_GUI, "TRUE");
-	}
-#endif
+	/* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
+	enable_gui();
 
-	set_opt_defaults();		/* set option default values */
+	/* Set option default values */
+	set_opt_defaults();
 
 	/* Parse destination string */
 	server_out[0] = '\0';
