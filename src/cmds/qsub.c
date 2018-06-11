@@ -3759,13 +3759,17 @@ process_opts(int argc, char **argv, int passet)
 /*
  * @brief
  *  Process special options.
- *  TODO
+ *  The "--" parameter indicates an executable and possible arguments to that
+ *  exectuable. qsub will treat that executable and its arguments as the job
+ *  rather than reading from a job script.
  *
- * @param[out] script       - TODO
- * @return     command_flag - TODO
+ * @param[in]  argc         - argument count
+ * @param[in]  argv         - pointer to array of argument variables
+ * @param[out] script       - path of job script
+ * @return     command_flag - indicates whether an executable was specified instead of a job script
  */
-int
-process_special_opts(int argc, char **argv, char *script)
+static int
+process_special_opts(int const argc, char ** const argv, char * const script)
 {
 	int command_flag = 0;
 	char *arg_list = NULL;
