@@ -3756,10 +3756,10 @@ process_opts(int argc, char **argv, int passet)
 	return (errflg);
 }
 
-/*
+/**
  * @brief
- *  Process special options.
- *  The "--" parameter indicates an executable and possible arguments to that
+ *  Process special arguments.
+ *  The "--" argument indicates an executable and possible arguments to that
  *  exectuable. qsub will treat that executable and its arguments as the job
  *  rather than reading from a job script.
  *
@@ -3769,7 +3769,7 @@ process_opts(int argc, char **argv, int passet)
  * @return     command_flag - indicates whether an executable was specified instead of a job script
  */
 static int
-process_special_opts(int const argc, char ** const argv, char * const script)
+process_special_args(int const argc, char ** const argv, char * const script)
 {
 	int command_flag = 0;
 	char *arg_list = NULL;
@@ -5077,13 +5077,14 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		cmdargs = NULL;
 	}
 
-	/* Process arguments */
+	/* Process options */
 	errflg = process_opts(argc, argv, CMDLINE);  /* get cmd-line options */
 	if (errflg) {
 		print_usage();
 		exit_qsub  (2);
 	}
-	command_flag = process_special_opts(argc, argv, script);
+	/* Process special arguments */
+	command_flag = process_special_args(argc, argv, script);
 
 #ifdef WIN32
 	back2forward_slash(script);
