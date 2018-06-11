@@ -3801,88 +3801,6 @@ process_special_args(int const argc, char ** const argv, char * const script)
 	return command_flag;
 }
 
-/* TODO: move the definition here */
-int get_script(FILE *file, char *script, char *prefix);
-
-/**
- * @brief
- * Read the job script from a file or stdin.
- *
- * @param[in] script - path of job script to read from
- * @return    errflg - TODO
- */
-static int
-read_job_script(char * const script)
-{
-	int errflg;
-
-	struct stat statbuf;
-	char *bnp;
-	char  basename[PBS_MAXJOBNAME+1];			/* base name of script for job name*/
-	FILE *f;                            /* FILE pointer to the script */
-
-	/* if script is empty, get standard input */
-	if ((strcmp(script, "") == 0) || (strcmp(script, "-") == 0)) {
-		/* if this is a terminal, print a short info */
-		if (isatty(STDIN_FILENO) && Interact_opt == FALSE) {
-#ifdef WIN32
-			printf("Job script will be read from standard input. Submit with CTRL+Z.\n");
-#else
-			printf("Job script will be read from standard input. Submit with CTRL+D.\n");
-#endif
-		}
-
-		if (! N_opt)
-			set_attr(&attrib, ATTR_N, "STDIN");
-		if (Interact_opt == FALSE) {
-			if ((errflg=get_script(stdin, script_tmp,
-							set_dir_prefix(dir_prefix, C_opt))) > 0) {
-				(void)unlink(script_tmp);
-				exit_qsub(1);
-			} else if (errflg < 0) {
-				exit_qsub(1);
-			}
-		}
-	} else {  /* non-empty script, read it for directives */
-		if (stat(script, &statbuf) < 0) {
-			perror("qsub: script file:");
-			exit_qsub(1);
-		}
-		if (! S_ISREG(statbuf.st_mode)) {
-			fprintf(stderr, "qsub: script not a file\n");
-			exit_qsub(1);
-		}
-		if ((f = fopen(script, "r")) != NULL) {
-			if (! N_opt) {
-				if ((bnp = strrchr(script, (int)'/')) != NULL)
-					bnp++;
-				else
-					bnp = script;
-				(void)strncpy(basename, bnp, PBS_MAXJOBNAME);
-				basename[PBS_MAXJOBNAME] = '\0';
-				/*
-				 * set ATTR_N directly - verification would be done
-				 * by IFL later
-				 */
-				set_attr(&attrib, ATTR_N, basename);
-			}
-			if ((errflg=get_script(f, script_tmp, set_dir_prefix(dir_prefix, C_opt))) > 0) {
-				(void)unlink(script_tmp);
-				exit_qsub(1);
-			} else if (errflg < 0) {
-				exit_qsub(1);
-			}
-			(void)fclose(f);
-			f = NULL;
-		} else {
-			perror("qsub: opening script file:");
-			exit_qsub(8);
-		}
-	}
-
-	return errflg;
-}
-
 /**
  * @brief
  * 	processes and creates arguments passed for qsub
@@ -4136,6 +4054,83 @@ get_script(FILE *file, char *script, char *prefix)
 		return (5);
 	}
 	return (0);
+}
+
+/**
+ * @brief
+ * Read the job script from a file or stdin.
+ *
+ * @param[in] script - path of job script to read from
+ */
+static void
+read_job_script(char * const script)
+{
+	int errflg; /* error code from get_script() */
+	struct stat statbuf;
+	char *bnp;
+	char  basename[PBS_MAXJOBNAME+1]; /* base name of script for job name*/
+	FILE *f; /* FILE pointer to the script */
+
+	/* if script is empty, get standard input */
+	if ((strcmp(script, "") == 0) || (strcmp(script, "-") == 0)) {
+		/* if this is a terminal, print a short info */
+		if (isatty(STDIN_FILENO) && Interact_opt == FALSE) {
+#ifdef WIN32
+			printf("Job script will be read from standard input. Submit with CTRL+Z.\n");
+#else
+			printf("Job script will be read from standard input. Submit with CTRL+D.\n");
+#endif
+		}
+
+		if (! N_opt)
+			set_attr(&attrib, ATTR_N, "STDIN");
+		if (Interact_opt == FALSE) {
+			errflg = get_script(stdin, script_tmp, set_dir_prefix(dir_prefix, C_opt));
+			if (errflg > 0) {
+				(void)unlink(script_tmp);
+				exit_qsub(1);
+			} else if (errflg < 0) {
+				exit_qsub(1);
+			}
+		}
+	} else {  /* non-empty script, read it for directives */
+		if (stat(script, &statbuf) < 0) {
+			perror("qsub: script file:");
+			exit_qsub(1);
+		}
+		if (! S_ISREG(statbuf.st_mode)) {
+			fprintf(stderr, "qsub: script not a file\n");
+			exit_qsub(1);
+		}
+		if ((f = fopen(script, "r")) != NULL) {
+			if (! N_opt) {
+				if ((bnp = strrchr(script, (int)'/')) != NULL)
+					bnp++;
+				else
+					bnp = script;
+
+				(void)strncpy(basename, bnp, PBS_MAXJOBNAME);
+				basename[PBS_MAXJOBNAME] = '\0';
+				/*
+				 * set ATTR_N directly - verification would be done
+				 * by IFL later
+				 */
+				set_attr(&attrib, ATTR_N, basename);
+			}
+			errflg = get_script(f, script_tmp, set_dir_prefix(dir_prefix, C_opt));
+			if (errflg > 0) {
+				(void)unlink(script_tmp);
+				exit_qsub(1);
+			} else if (errflg < 0) {
+				exit_qsub(1);
+			}
+			(void)fclose(f);
+			f = NULL;
+		} else {
+			perror("qsub: opening script file:");
+			exit_qsub(8);
+		}
+	}
 }
 
 /**
@@ -5170,7 +5165,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 
 	if (command_flag == 0)
 		/* Read the job script from a file or stdin */
-		errflg = read_job_script(script);
+		read_job_script(script);
 
 /* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
 #ifndef WIN32 /* Unix */
