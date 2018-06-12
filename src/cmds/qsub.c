@@ -2525,6 +2525,33 @@ exit_on_sigpipe(int sig)
 }
 #endif
 
+/**
+ * @brief
+ *  Set the signal handlers.
+ */
+static void
+set_sig_handlers(void)
+{
+#ifdef WIN32
+	signal(SIGINT, win_blockint);
+	signal(SIGBREAK, win_blockint);
+	signal(SIGTERM, win_blockint);
+
+	winsock_init();
+	InitializeCriticalSection(&continuethread_cs);
+#else
+	/* Catch SIGPIPE on write() failures. */
+	struct sigaction act;
+	sigemptyset(&act.sa_mask);
+	act.sa_handler = exit_on_sigpipe;
+	act.sa_flags   = 0;
+	if (sigaction(SIGPIPE, &act, NULL) < 0) {
+		perror("qsub: unable to catch SIGPIPE");
+		exit_qsub(1);
+	}
+#endif
+}
+
 #define BAIL(message) \
 	if (ret != DIS_SUCCESS) { \
 		fail = message; \
@@ -5104,27 +5131,10 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	int do_regular_submit = 1; /* used if daemon based submit fails */
 #ifndef WIN32
 	int daemon_up = 0;
-	struct sigaction act;
 #endif
 
-/* Set signal handlers */
-#ifdef WIN32
-	signal(SIGINT, win_blockint);
-	signal(SIGBREAK, win_blockint);
-	signal(SIGTERM, win_blockint);
-
-	winsock_init();
-	InitializeCriticalSection(&continuethread_cs);
-#else
-	/* Catch SIGPIPE on write() failures. */
-	sigemptyset(&act.sa_mask);
-	act.sa_handler = exit_on_sigpipe;
-	act.sa_flags   = 0;
-	if (sigaction(SIGPIPE, &act, NULL) < 0) {
-		perror("qsub: unable to catch SIGPIPE");
-		exit_qsub(1);
-	}
-#endif
+	/* Set signal handlers */
+	set_sig_handlers();
 
 	/*
 	 * Print version info and exit, if specified with --version option.
