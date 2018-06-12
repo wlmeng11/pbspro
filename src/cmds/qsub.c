@@ -744,13 +744,11 @@ static void
 exit_qsub(int exitstatus)
 {
 #ifdef WIN32
-	/*
-	 * A thread that makes qsub exit, should try and acquire the Critical Section.
-	 */
+	/* A thread that makes qsub exit, should try and acquire the Critical Section. */
 	EnterCriticalSection(&continuethread_cs);
 #endif
 	if (cs_init == 1)
-		/*cleanup security library initializations before exiting*/
+		/* Cleanup security library initializations before exiting */
 		CS_close_app();
 
 #ifdef BACKTRACE_SIZE
@@ -4135,7 +4133,7 @@ read_job_script(char * const script)
 
 /**
  * @brief
-*  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified
+ *  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified.
  */
 static void
 enable_gui(void)
@@ -5238,7 +5236,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	 * qsub should fully execute from the foreground, so daemon_submit() is not called.
 	 * It should not fork, neither should it send the data to the background qsub.
 	 *
-	 * If all 3 options are zero, then call daemon_submit().
+	 * If all 3 of these options are zero, then try to submit via daemon.
 	 */
 	if ((Interact_opt || block_opt || no_background) == 0) {
 		/* Try to submit jobs using a daemon */
@@ -5249,16 +5247,15 @@ main(int argc, char **argv, char **envp)   /* qsub */
 #endif
 	}
 
-	if (do_regular_submit == 1) { /* submission via daemon was not successful, so do regular submit */
+	if (do_regular_submit == 1)
+		/* submission via daemon was not successful, so do regular submit */
 		rc = regular_submit(daemon_up);
-	}
 
 	/* remove temporary job script file */
 	(void)unlink(script_tmp);
 
 	if (rc == 0) { /* submit was successful */
 		new_jobname = retmsg;
-
 		if (!z_opt && Interact_opt == FALSE)
 			printf("%s\n", retmsg); /* print jobid with a \n */
 	} else {
