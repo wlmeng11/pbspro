@@ -5131,9 +5131,10 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	char *cmdargs = NULL;
 	int command_flag = 0;
 	int rc; /* error code for submit */
-	char qsub_exe[MAXPATHLEN+1];
 	int do_regular_submit = 1; /* used if daemon based submit fails */
-#ifndef WIN32
+#ifdef WIN32 /* Windows */
+	char qsub_exe[MAXPATHLEN+1];
+#else /* Unix */
 	int daemon_up = 0;
 #endif
 
@@ -5178,9 +5179,10 @@ main(int argc, char **argv, char **envp)   /* qsub */
 			do_daemon_stuff(argv[2], argv[3], argv[4]);
 		exit(0);
 	}
-#endif
 
 	strcpy(qsub_exe, argv[0]); /* note the name of the qsub executable */
+#endif
+
 
 	/*
 	 * If qsub command is submitted with arguments, then capture them and
