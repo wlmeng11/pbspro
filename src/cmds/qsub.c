@@ -364,6 +364,10 @@ static char	pbs_o_env[] = "PBS_O_";
 static char	*tmpdir = NULL;
 
 
+/*
+ * The following bunch of functions are "Utility" functions.
+ */
+
 /**
  * @brief
  *	Function used to log port forwarding messages.
@@ -774,502 +778,6 @@ exit_qsub(int exitstatus)
 	exit(exitstatus);
 }
 
-/*
- * static buffer and length used by various messages for communication
- * between the qsub foreground and background process
- */
-static char *buf = NULL;
-static int buflen = 0;
-/**
- * @brief
- *  	This static internal function is used to easily resize a buffer
- * 	uses static variables buf, and buflen defined above
- *
- * @param bufused - Amount of the buffer used
- * @param lenreq - Amount of length required by new data
- *
- * @return - Error code
- * @retval - 0 - Success
- * @retval - -1 - Error
- *
- */
-static int
-resize_buffer(int bufused, int lenreq)
-{
-	char *p;
-	lenreq += bufused;
-	if (buflen < lenreq) {
-		lenreq += 1000; /* adding 1000 so that we realloc fewer times */
-		p = realloc(buf, lenreq);
-		if (p == NULL) {
-			if (buf) {
-				free(buf);
-				buf = NULL;
-			}
-			buflen = 0;
-			return -1;
-		}
-		buf = p;
-		buflen = lenreq;
-	}
-	return 0;
-}
-
-#ifdef WIN32
-#ifdef DEBUG
-/**
- * @brief
- *	prints the error messgae
- *
- */
-static void
-printLastError()
-{
-	LPVOID lpMsgBuf;
-	LPVOID lpDisplayBuf;
-	DWORD dw = GetLastError();
-
-	FormatMessage(
-		FORMAT_MESSAGE_ALLOCATE_BUFFER |
-		FORMAT_MESSAGE_FROM_SYSTEM |
-		FORMAT_MESSAGE_IGNORE_INSERTS,
-		NULL,
-		dw,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPTSTR) &lpMsgBuf,
-		0, NULL);
-
-	printf("%s\n", lpMsgBuf);
-}
-#endif
-#endif
-
-/**
- * @brief
- *	Receive data of bufsize length from the peer. Used for communications
- * 	between the foreground and background qsub processes.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @param[in]	buf - The buf to receive data into
- * @param[in]	bufsize - The amount of data to read
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-dorecv(void *s, char *buf, int bufsize)
-{
-	int bytes = 0;
-	char *p = buf;
-	int remaining = bufsize;
-#ifdef WIN32
-	BOOL fSuccess = 0;
-	HANDLE hPipe = (HANDLE) s;
-
-	do {
-		fSuccess = ReadFile(
-			hPipe, /* handle to pipe */
-			p, /* buffer to receive data */
-			remaining, /* size of buffer */
-			&bytes, /* number of bytes read */
-			NULL); /* not overlapped I/O */
-
-		if (!fSuccess && GetLastError() != ERROR_MORE_DATA)
-			return -1;
-		p += bytes;
-		remaining -= bytes;
-	} while (!fSuccess); /* repeat loop if ERROR_MORE_DATA */
-#else
-	int sock = (int) *((int *) s);
-	int rc;
-
-	do {
-		errno = 0;
-		rc = read(sock, p, remaining);
-		if (rc == -1)
-			return -1;
-		if (rc == 0)
-			break;
-		bytes += rc;
-		p += rc;
-		remaining -= rc;
-	} while (bytes < bufsize);
-
-	if (bytes != bufsize)
-		return -1;
-#endif
-	return 0;
-}
-
-/**
- * @brief
- *	Send data of bufsize length to the peer. Used for communications
- * 	between the foreground and background qsub processes.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @param[in]	buf - The buf to send data from
- * @param[in]	bufsize - The amount of data to send
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-dosend(void *s, char *buf, int bufsize)
-{
-	int bytes = 0;
-#ifdef WIN32
-	BOOL fSuccess = 0;
-	HANDLE hPipe = (HANDLE) s;
-
-	fSuccess = WriteFile(
-		hPipe, /* handle to pipe */
-		buf, /* buffer to write from */
-		bufsize, /* number of bytes to write */
-		&bytes, /* number of bytes written */
-		NULL); /* not overlapped I/O */
-
-	if (!fSuccess || bufsize != bytes)
-		return -1;
-#else
-	int sock = (int) *((int *) s);
-	int rc;
-	char *p = buf;
-	int remaining = bufsize;
-	do {
-		/*
-		 * For systems with MSG_NOSIGNAL defined (e.g. Linux 2.2 and later),
-		 * we use send() rather than write() in order to block the SIGPIPE
-		 * that qsub would receive if the remote side closes the stream. For
-		 * other systems, the exit_on_sigpipe() handler gets called.
-		 */
-		errno = 0;
-#ifdef MSG_NOSIGNAL
-		rc = send(sock, p, remaining, MSG_NOSIGNAL);
-#else
-		rc = write(sock, p, remaining);
-#endif
-		if (rc == -1)
-			return -1;
-		if (rc == 0)
-			break;
-		bytes += rc;
-		p += rc;
-		remaining -= rc;
-	} while (bytes < bufsize);
-
-	if (bytes != bufsize)
-		return -1;
-#endif
-	return 0;
-}
-
-/**
- * @brief
- *	Send the cmd opt values for each parameter supported by qsub to the
- *	background qsub process.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-send_opts(void *s)
-{
-	/*
-	 * we are allocating a fixed size of 100. This is because we know that
-	 * the list of opts to send is going to fit within 100. Specifically, for each
-	 * opt we need 2 characters, and currently we have 35 opts.
-	 * If a new set of opts are added, the buffer space of 100 allocated here
-	 * needs to be double checked.
-	 */
-	if (resize_buffer(0, 100) != 0)
-		return -1;
-
-	sprintf(buf,
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d ",
-		a_opt, c_opt, e_opt, h_opt, j_opt,
-		k_opt, l_opt, m_opt, o_opt, p_opt,
-		q_opt, r_opt, u_opt, v_opt, z_opt,
-		A_opt, C_opt, J_opt, M_opt, N_opt,
-		S_opt, V_opt, Depend_opt, Interact_opt, Stagein_opt,
-		Stageout_opt, Sandbox_opt, Grouplist_opt, Resvstart_opt,
-		Resvend_opt, pwd_opt, cred_opt, block_opt, P_opt,
-					relnodes_on_stageout_opt);
-
-	return (send_string(s, buf));
-}
-
-/**
- * @brief
- *	Recv the cmd opt values for each parameter supported by qsub from the
- *	foreground qsub process.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-recv_opts(void *s)
-{
-	/*
-	 * we are allocating a fixed size of 100. This is because we know that
-	 * the list of opts to send is going to fit within 100. Specifically, for each
-	 * opt we need 2 characters, and currently we have 35 opts.
-	 * If a new set of opts are added, the buffer space of 100 allocated here
-	 * needs to be double checked.
-	 */
-	if (resize_buffer(0, 100) != 0)
-		return -1;
-
-	if (recv_string(s, buf) != 0)
-		return -1;
-
-	sscanf(buf,
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d ",
-		&a_opt, &c_opt, &e_opt, &h_opt, &j_opt,
-		&k_opt, &l_opt, &m_opt, &o_opt, &p_opt,
-		&q_opt, &r_opt, &u_opt, &v_opt, &z_opt,
-		&A_opt, &C_opt, &J_opt, &M_opt, &N_opt,
-		&S_opt, &V_opt, &Depend_opt, &Interact_opt, &Stagein_opt,
-		&Stageout_opt, &Sandbox_opt, &Grouplist_opt, &Resvstart_opt,
-		&Resvend_opt, &pwd_opt, &cred_opt, &block_opt, &P_opt,
-			&relnodes_on_stageout_opt);
-	return 0;
-}
-
-/**
- * @brief
- *	Send the attrl list to the background qsub process. This is the
- * 	attribute  list that was created by the foreground process based on
- *	the options that the user has provided to qsub.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @parma[in]	attrib - List of attributes created by foreground qsub process
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-send_attrl(void *s, struct attrl *attrib)
-{
-	int bufused = 0;
-	int lenN = 0, lenR = 0, lenV = 0;
-	char *p;
-	int lenreq = 0;
-
-	while (attrib) {
-		lenN = strlen(attrib->name) + 1;
-		if (attrib->resource)
-			lenR = strlen(attrib->resource) + 1;
-		else
-			lenR = 0;
-		lenV = strlen(attrib->value) + 1;
-
-		lenreq = lenN + lenR + lenV + 3 * sizeof(int);
-		if (resize_buffer(bufused, lenreq) != 0)
-			return -1;
-
-		/* write the lengths */
-		p = buf + bufused;
-		memmove(p, &lenN, sizeof(int));
-		p += sizeof(int);
-		memmove(p, &lenR, sizeof(int));
-		p += sizeof(int);
-		memmove(p, &lenV, sizeof(int));
-		p += sizeof(int);
-
-		/* now add the strings */
-		memmove(p, attrib->name, lenN);
-		p += lenN;
-		if (lenR > 0) {
-			memmove(p, attrib->resource, lenR);
-			p += lenR;
-		}
-		memmove(p, attrib->value, lenV);
-		p += lenV;
-
-		bufused += lenreq;
-
-		attrib = attrib->next;
-	}
-	if ((dosend(s, (char *) &bufused, sizeof(int)) != 0) ||
-		(dosend(s, buf, bufused) != 0))
-		return -1;
-
-	return 0;
-}
-
-/**
- * @brief
- *  	Send a null terminated string to the peer process. Used by backrgound and
- * 	foreground qsub processes to communicate error-strings, job-ids etc.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @parma[in]	str - null terminated string to send
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-send_string(void *s, char *str)
-{
-	int len = strlen(str) + 1;
-
-	if ((dosend(s, (char *) &len, sizeof(int)) != 0) ||
-		(dosend(s, str, len) != 0))
-		return -1;
-
-	return 0;
-}
-
-/**
- * @brief
- *	Recv the attrl list from the foreground qsub process. This is the
- * 	attribute  list that was created by the foreground process based on
- * 	the options that the user has provided to qsub.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @parma[in]	attrib - List of attributes created by foreground qsub process
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-recv_attrl(void *s, struct attrl **attrib)
-{
-	int recvlen = 0;
-	struct attrl *attr = NULL;
-	char *p;
-	int lenN = 0, lenR = 0, lenV = 0;
-	char *attr_v_val = NULL;
-
-	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
-		return -1;
-	if (resize_buffer(0, recvlen) != 0)
-		return -1;
-
-	if (dorecv(s, buf, recvlen) != 0)
-		return -1;
-
-	p = buf;
-	while (p - buf < recvlen) {
-		memmove(&lenN, p, sizeof(int));
-		p += sizeof(int);
-		memmove(&lenR, p, sizeof(int));
-		p += sizeof(int);
-		memmove(&lenV, p, sizeof(int));
-		p += sizeof(int);
-
-		if (lenR > 0) {
-			/* strings have null character also in buf */
-			set_attr_resc(&attr, p,
-				p + lenN,
-				p + lenN + lenR);
-		} else {
-			/*
-			 * if value is ATTR_v, we need to add PBS_O_HOSTNAME to it
-			 * Since determininig PBS_O_HOSTNAME is expensive, we do it
-			 * once in the background qsub, and add it to the list that comes
-			 * from the front end qsub
-			 */
-			if (strcmp(p, ATTR_v) == 0 && pbs_hostvar != NULL) {
-				attr_v_val = malloc(lenV + strlen(pbs_hostvar) + 1);
-				if (!attr_v_val)
-					return -1;
-				strcpy(attr_v_val, p + lenN);
-				strcat(attr_v_val, pbs_hostvar);
-				set_attr(&attr, p, attr_v_val);
-				free(attr_v_val);
-			} else {
-				set_attr(&attr, p, p + lenN);
-			}
-		}
-		p += lenN + lenR + lenV;
-	}
-	*attrib = attr;
-	return 0;
-}
-
-/**
- * @brief
- *  	Recv a null terminated string from the peer process. Used by backrgound and
- * 	foreground qsub processes to communicate error-strings, job-ids etc.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @parma[in]	str - null terminated string to send
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-recv_string(void *s, char *str)
-{
-	int len = 0;
-
-	if ((dorecv(s, (char *) &len, sizeof(int)) != 0) ||
-		(dorecv(s, str, len) != 0))
-		return -1;
-
-	return 0;
-}
-
-
-/**
- * @brief
- *  	Recv a null terminated string from the peer process. Used by background and
- * 	foreground qsub processes to communicate error-strings, job-ids etc.
- * 	This is like recv_string() except the 'strp' parameter will hold a pointer
- * 	to a newly-malloced string holding the resultant string.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- * @parma[out]	strp - holds a pointer to the newly-malloced string.
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-recv_dyn_string(void *s, char **strp)
-{
-	int recvlen = 0;
-
-	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
-		return -1;
-	/* resizes the global 'buf' array */
-	if (resize_buffer(0, recvlen) != 0)
-		return -1;
-	if (dorecv(s, buf, recvlen) != 0)
-		return -1;
-
-	*strp = strdup(buf);
-	return 0;
-}
-
 /**
  * @brief
  *	strdup_esc_commas - duplicate a string escaping commas
@@ -1308,6 +816,40 @@ strdup_esc_commas(char *str_to_dup)
 	*endstr = '\0';
 	return (returnstr);
 }
+
+/**
+ * @brief
+ *	prints the usage format for qsub
+ *
+ */
+static void
+print_usage()
+{
+#ifdef WIN32
+	static char usag2[]="       qsub --version\n";
+	static char usage[]=
+		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
+	"\t[-C directive_prefix] [-e path] [-f ] [-G] [-h ] [-j oe|eo] [-J X-Y[:Z]]\n"
+	"\t[-k keep] [-l resource_list] [-m mail_options] [-M user_list]\n"
+	"\t[-N jobname] [-o path] [-p priority] [-P project] [-q queue] [-r y|n]\n"
+	"\t[-R o|e|oe] [-S path] [-u user_list] [-W otherattributes=value...]\n"
+	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
+#else
+	static char usag2[]="       qsub --version\n";
+	static char usage[]=
+		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
+	"\t[-C directive_prefix] [-e path] [-f ] [-h ] [-I [-X]] [-j oe|eo] [-J X-Y[:Z]]\n"
+	"\t[-k keep] [-l resource_list] [-m mail_options] [-M user_list]\n"
+	"\t[-N jobname] [-o path] [-p priority] [-P project] [-q queue] [-r y|n]\n"
+	"\t[-R o|e|oe] [-S path] [-u user_list] [-W otherattributes=value...]\n"
+	"\t[-S path] [-u user_list] [-W otherattributes=value...]\n"
+	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
+#endif
+	fprintf(stderr, "%s", usage);
+	fprintf(stderr, "%s", usag2);
+}
+
+/* End of "Utility" functions. */
 
 /*
  * The following bunch of functions support the "Interactive Job"
@@ -3197,7 +2739,7 @@ get_passwd()
  */
 
 /*
- * The following bunch of functions support the "Options"
+ * The following bunch of functions support the "Options Processing"
  * functionality of qsub.
  */
 
@@ -3999,7 +3541,7 @@ set_opt_defaults()
 }
 
 /*
- * End of "Options" functions.
+ * End of "Options Processing" functions.
  */
 
 /*
@@ -4242,6 +3784,11 @@ read_job_script(char * const script)
 
 /*
  * End of "Job Script" functions.
+ */
+
+/*
+ * The following bunch of functions supports the "Environment Variables"
+ * feature of qsub.
  */
 
 /**
@@ -4750,42 +4297,511 @@ final:
 	return TRUE;
 }
 
-/**
- * @brief
- *	prints the usage format for qsub
- *
+/*
+ * End of "Environment Variables" functions.
  */
-static void
-print_usage()
-{
-#ifdef WIN32
-	static char usag2[]="       qsub --version\n";
-	static char usage[]=
-		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
-	"\t[-C directive_prefix] [-e path] [-f ] [-G] [-h ] [-j oe|eo] [-J X-Y[:Z]]\n"
-	"\t[-k keep] [-l resource_list] [-m mail_options] [-M user_list]\n"
-	"\t[-N jobname] [-o path] [-p priority] [-P project] [-q queue] [-r y|n]\n"
-	"\t[-R o|e|oe] [-S path] [-u user_list] [-W otherattributes=value...]\n"
-	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
-#else
-	static char usag2[]="       qsub --version\n";
-	static char usage[]=
-		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
-	"\t[-C directive_prefix] [-e path] [-f ] [-h ] [-I [-X]] [-j oe|eo] [-J X-Y[:Z]]\n"
-	"\t[-k keep] [-l resource_list] [-m mail_options] [-M user_list]\n"
-	"\t[-N jobname] [-o path] [-p priority] [-P project] [-q queue] [-r y|n]\n"
-	"\t[-R o|e|oe] [-S path] [-u user_list] [-W otherattributes=value...]\n"
-	"\t[-S path] [-u user_list] [-W otherattributes=value...]\n"
-	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
-#endif
-	fprintf(stderr, "%s", usage);
-	fprintf(stderr, "%s", usag2);
-}
 
 
 /*
  * The following bunch of functions support the "Daemon" capability of qsub.
  */
+
+/*
+ * static buffer and length used by various messages for communication
+ * between the qsub foreground and background process
+ */
+static char *buf = NULL;
+static int buflen = 0;
+
+/**
+ * @brief
+ *  	This static internal function is used to easily resize a buffer
+ * 	uses static variables buf, and buflen defined above
+ *
+ * @param bufused - Amount of the buffer used
+ * @param lenreq - Amount of length required by new data
+ *
+ * @return - Error code
+ * @retval - 0 - Success
+ * @retval - -1 - Error
+ *
+ */
+static int
+resize_buffer(int bufused, int lenreq)
+{
+	char *p;
+	lenreq += bufused;
+	if (buflen < lenreq) {
+		lenreq += 1000; /* adding 1000 so that we realloc fewer times */
+		p = realloc(buf, lenreq);
+		if (p == NULL) {
+			if (buf) {
+				free(buf);
+				buf = NULL;
+			}
+			buflen = 0;
+			return -1;
+		}
+		buf = p;
+		buflen = lenreq;
+	}
+	return 0;
+}
+
+#ifdef WIN32
+#ifdef DEBUG
+/**
+ * @brief
+ *	prints the error messgae
+ *
+ */
+static void
+printLastError()
+{
+	LPVOID lpMsgBuf;
+	LPVOID lpDisplayBuf;
+	DWORD dw = GetLastError();
+
+	FormatMessage(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		FORMAT_MESSAGE_FROM_SYSTEM |
+		FORMAT_MESSAGE_IGNORE_INSERTS,
+		NULL,
+		dw,
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		(LPTSTR) &lpMsgBuf,
+		0, NULL);
+
+	printf("%s\n", lpMsgBuf);
+}
+#endif
+#endif
+
+/**
+ * @brief
+ *	Receive data of bufsize length from the peer. Used for communications
+ * 	between the foreground and background qsub processes.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @param[in]	buf - The buf to receive data into
+ * @param[in]	bufsize - The amount of data to read
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+dorecv(void *s, char *buf, int bufsize)
+{
+	int bytes = 0;
+	char *p = buf;
+	int remaining = bufsize;
+#ifdef WIN32
+	BOOL fSuccess = 0;
+	HANDLE hPipe = (HANDLE) s;
+
+	do {
+		fSuccess = ReadFile(
+			hPipe, /* handle to pipe */
+			p, /* buffer to receive data */
+			remaining, /* size of buffer */
+			&bytes, /* number of bytes read */
+			NULL); /* not overlapped I/O */
+
+		if (!fSuccess && GetLastError() != ERROR_MORE_DATA)
+			return -1;
+		p += bytes;
+		remaining -= bytes;
+	} while (!fSuccess); /* repeat loop if ERROR_MORE_DATA */
+#else
+	int sock = (int) *((int *) s);
+	int rc;
+
+	do {
+		errno = 0;
+		rc = read(sock, p, remaining);
+		if (rc == -1)
+			return -1;
+		if (rc == 0)
+			break;
+		bytes += rc;
+		p += rc;
+		remaining -= rc;
+	} while (bytes < bufsize);
+
+	if (bytes != bufsize)
+		return -1;
+#endif
+	return 0;
+}
+
+/**
+ * @brief
+ *	Send data of bufsize length to the peer. Used for communications
+ * 	between the foreground and background qsub processes.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @param[in]	buf - The buf to send data from
+ * @param[in]	bufsize - The amount of data to send
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+dosend(void *s, char *buf, int bufsize)
+{
+	int bytes = 0;
+#ifdef WIN32
+	BOOL fSuccess = 0;
+	HANDLE hPipe = (HANDLE) s;
+
+	fSuccess = WriteFile(
+		hPipe, /* handle to pipe */
+		buf, /* buffer to write from */
+		bufsize, /* number of bytes to write */
+		&bytes, /* number of bytes written */
+		NULL); /* not overlapped I/O */
+
+	if (!fSuccess || bufsize != bytes)
+		return -1;
+#else
+	int sock = (int) *((int *) s);
+	int rc;
+	char *p = buf;
+	int remaining = bufsize;
+	do {
+		/*
+		 * For systems with MSG_NOSIGNAL defined (e.g. Linux 2.2 and later),
+		 * we use send() rather than write() in order to block the SIGPIPE
+		 * that qsub would receive if the remote side closes the stream. For
+		 * other systems, the exit_on_sigpipe() handler gets called.
+		 */
+		errno = 0;
+#ifdef MSG_NOSIGNAL
+		rc = send(sock, p, remaining, MSG_NOSIGNAL);
+#else
+		rc = write(sock, p, remaining);
+#endif
+		if (rc == -1)
+			return -1;
+		if (rc == 0)
+			break;
+		bytes += rc;
+		p += rc;
+		remaining -= rc;
+	} while (bytes < bufsize);
+
+	if (bytes != bufsize)
+		return -1;
+#endif
+	return 0;
+}
+
+/**
+ * @brief
+ *	Send the cmd opt values for each parameter supported by qsub to the
+ *	background qsub process.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+send_opts(void *s)
+{
+	/*
+	 * we are allocating a fixed size of 100. This is because we know that
+	 * the list of opts to send is going to fit within 100. Specifically, for each
+	 * opt we need 2 characters, and currently we have 35 opts.
+	 * If a new set of opts are added, the buffer space of 100 allocated here
+	 * needs to be double checked.
+	 */
+	if (resize_buffer(0, 100) != 0)
+		return -1;
+
+	sprintf(buf,
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d ",
+		a_opt, c_opt, e_opt, h_opt, j_opt,
+		k_opt, l_opt, m_opt, o_opt, p_opt,
+		q_opt, r_opt, u_opt, v_opt, z_opt,
+		A_opt, C_opt, J_opt, M_opt, N_opt,
+		S_opt, V_opt, Depend_opt, Interact_opt, Stagein_opt,
+		Stageout_opt, Sandbox_opt, Grouplist_opt, Resvstart_opt,
+		Resvend_opt, pwd_opt, cred_opt, block_opt, P_opt,
+					relnodes_on_stageout_opt);
+
+	return (send_string(s, buf));
+}
+
+/**
+ * @brief
+ *	Recv the cmd opt values for each parameter supported by qsub from the
+ *	foreground qsub process.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+recv_opts(void *s)
+{
+	/*
+	 * we are allocating a fixed size of 100. This is because we know that
+	 * the list of opts to send is going to fit within 100. Specifically, for each
+	 * opt we need 2 characters, and currently we have 35 opts.
+	 * If a new set of opts are added, the buffer space of 100 allocated here
+	 * needs to be double checked.
+	 */
+	if (resize_buffer(0, 100) != 0)
+		return -1;
+
+	if (recv_string(s, buf) != 0)
+		return -1;
+
+	sscanf(buf,
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d ",
+		&a_opt, &c_opt, &e_opt, &h_opt, &j_opt,
+		&k_opt, &l_opt, &m_opt, &o_opt, &p_opt,
+		&q_opt, &r_opt, &u_opt, &v_opt, &z_opt,
+		&A_opt, &C_opt, &J_opt, &M_opt, &N_opt,
+		&S_opt, &V_opt, &Depend_opt, &Interact_opt, &Stagein_opt,
+		&Stageout_opt, &Sandbox_opt, &Grouplist_opt, &Resvstart_opt,
+		&Resvend_opt, &pwd_opt, &cred_opt, &block_opt, &P_opt,
+			&relnodes_on_stageout_opt);
+	return 0;
+}
+
+/**
+ * @brief
+ *	Send the attrl list to the background qsub process. This is the
+ * 	attribute  list that was created by the foreground process based on
+ *	the options that the user has provided to qsub.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @parma[in]	attrib - List of attributes created by foreground qsub process
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+send_attrl(void *s, struct attrl *attrib)
+{
+	int bufused = 0;
+	int lenN = 0, lenR = 0, lenV = 0;
+	char *p;
+	int lenreq = 0;
+
+	while (attrib) {
+		lenN = strlen(attrib->name) + 1;
+		if (attrib->resource)
+			lenR = strlen(attrib->resource) + 1;
+		else
+			lenR = 0;
+		lenV = strlen(attrib->value) + 1;
+
+		lenreq = lenN + lenR + lenV + 3 * sizeof(int);
+		if (resize_buffer(bufused, lenreq) != 0)
+			return -1;
+
+		/* write the lengths */
+		p = buf + bufused;
+		memmove(p, &lenN, sizeof(int));
+		p += sizeof(int);
+		memmove(p, &lenR, sizeof(int));
+		p += sizeof(int);
+		memmove(p, &lenV, sizeof(int));
+		p += sizeof(int);
+
+		/* now add the strings */
+		memmove(p, attrib->name, lenN);
+		p += lenN;
+		if (lenR > 0) {
+			memmove(p, attrib->resource, lenR);
+			p += lenR;
+		}
+		memmove(p, attrib->value, lenV);
+		p += lenV;
+
+		bufused += lenreq;
+
+		attrib = attrib->next;
+	}
+	if ((dosend(s, (char *) &bufused, sizeof(int)) != 0) ||
+		(dosend(s, buf, bufused) != 0))
+		return -1;
+
+	return 0;
+}
+
+/**
+ * @brief
+ *  	Send a null terminated string to the peer process. Used by backrgound and
+ * 	foreground qsub processes to communicate error-strings, job-ids etc.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @parma[in]	str - null terminated string to send
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+send_string(void *s, char *str)
+{
+	int len = strlen(str) + 1;
+
+	if ((dosend(s, (char *) &len, sizeof(int)) != 0) ||
+		(dosend(s, str, len) != 0))
+		return -1;
+
+	return 0;
+}
+
+/**
+ * @brief
+ *	Recv the attrl list from the foreground qsub process. This is the
+ * 	attribute  list that was created by the foreground process based on
+ * 	the options that the user has provided to qsub.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @parma[in]	attrib - List of attributes created by foreground qsub process
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+recv_attrl(void *s, struct attrl **attrib)
+{
+	int recvlen = 0;
+	struct attrl *attr = NULL;
+	char *p;
+	int lenN = 0, lenR = 0, lenV = 0;
+	char *attr_v_val = NULL;
+
+	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
+		return -1;
+	if (resize_buffer(0, recvlen) != 0)
+		return -1;
+
+	if (dorecv(s, buf, recvlen) != 0)
+		return -1;
+
+	p = buf;
+	while (p - buf < recvlen) {
+		memmove(&lenN, p, sizeof(int));
+		p += sizeof(int);
+		memmove(&lenR, p, sizeof(int));
+		p += sizeof(int);
+		memmove(&lenV, p, sizeof(int));
+		p += sizeof(int);
+
+		if (lenR > 0) {
+			/* strings have null character also in buf */
+			set_attr_resc(&attr, p,
+				p + lenN,
+				p + lenN + lenR);
+		} else {
+			/*
+			 * if value is ATTR_v, we need to add PBS_O_HOSTNAME to it
+			 * Since determininig PBS_O_HOSTNAME is expensive, we do it
+			 * once in the background qsub, and add it to the list that comes
+			 * from the front end qsub
+			 */
+			if (strcmp(p, ATTR_v) == 0 && pbs_hostvar != NULL) {
+				attr_v_val = malloc(lenV + strlen(pbs_hostvar) + 1);
+				if (!attr_v_val)
+					return -1;
+				strcpy(attr_v_val, p + lenN);
+				strcat(attr_v_val, pbs_hostvar);
+				set_attr(&attr, p, attr_v_val);
+				free(attr_v_val);
+			} else {
+				set_attr(&attr, p, p + lenN);
+			}
+		}
+		p += lenN + lenR + lenV;
+	}
+	*attrib = attr;
+	return 0;
+}
+
+/**
+ * @brief
+ *  	Recv a null terminated string from the peer process. Used by backrgound and
+ * 	foreground qsub processes to communicate error-strings, job-ids etc.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @parma[in]	str - null terminated string to send
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+recv_string(void *s, char *str)
+{
+	int len = 0;
+
+	if ((dorecv(s, (char *) &len, sizeof(int)) != 0) ||
+		(dorecv(s, str, len) != 0))
+		return -1;
+
+	return 0;
+}
+
+
+/**
+ * @brief
+ *  	Recv a null terminated string from the peer process. Used by background and
+ * 	foreground qsub processes to communicate error-strings, job-ids etc.
+ * 	This is like recv_string() except the 'strp' parameter will hold a pointer
+ * 	to a newly-malloced string holding the resultant string.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ * @parma[out]	strp - holds a pointer to the newly-malloced string.
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+recv_dyn_string(void *s, char **strp)
+{
+	int recvlen = 0;
+
+	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
+		return -1;
+	/* resizes the global 'buf' array */
+	if (resize_buffer(0, recvlen) != 0)
+		return -1;
+	if (dorecv(s, buf, recvlen) != 0)
+		return -1;
+
+	*strp = strdup(buf);
+	return 0;
+}
 
 /**
  * @brief
