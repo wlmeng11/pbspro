@@ -3197,8 +3197,7 @@ get_passwd()
  */
 
 /*
- * TODO
- * The following bunch of functions support the "TODO"
+ * The following bunch of functions support the "Options"
  * functionality of qsub.
  */
 
@@ -3974,6 +3973,39 @@ do_dir(char *opts, int opt_pass, char *retmsg, int ret_size)
 	return (ret);
 }
 
+/*
+ * @brief
+ *	set_opt_defaults - if not already set, set certain job attributes to
+ *	their default value
+ *
+ */
+void
+set_opt_defaults()
+{
+	if (c_opt == FALSE)
+		set_attr(&attrib, ATTR_c, CHECKPOINT_UNSPECIFIED);
+	if (h_opt == FALSE)
+		set_attr(&attrib, ATTR_h, NO_HOLD);
+	if (j_opt == FALSE)
+		set_attr(&attrib, ATTR_j, NO_JOIN);
+	if (k_opt == FALSE)
+		set_attr(&attrib, ATTR_k, NO_KEEP);
+	if (m_opt == FALSE)
+		set_attr(&attrib, ATTR_m, MAIL_AT_ABORT);
+	if (p_opt == FALSE)
+		set_attr(&attrib, ATTR_p, "0");
+	if (r_opt == FALSE)
+		set_attr(&attrib, ATTR_r, "TRUE");
+}
+
+/*
+ * End of "Options" functions.
+ */
+
+/*
+ * The following bunch of functions support the "Job Script"
+ * functionality of qsub.
+ */
 
 /**
  * @brief
@@ -4207,6 +4239,10 @@ read_job_script(char * const script)
 		}
 	}
 }
+
+/*
+ * End of "Job Script" functions.
+ */
 
 /**
  * @brief
@@ -4502,7 +4538,6 @@ job_env_basic(void)
 	}
 
 	return (job_env);
-
 }
 
 
@@ -4522,7 +4557,6 @@ job_env_basic(void)
  * @retval      A comma-separated list of environment variables and values.
  *		The returned string is malloc-ed so it must be freed later.
  */
-
 char *
 env_array_to_varlist(char **envp)
 {
@@ -4712,31 +4746,6 @@ final:
 	return TRUE;
 }
 
-/*
- * @brief
- *	set_opt_defaults - if not already set, set certain job attributes to
- *	their default value
- *
- */
-void
-set_opt_defaults()
-{
-	if (c_opt == FALSE)
-		set_attr(&attrib, ATTR_c, CHECKPOINT_UNSPECIFIED);
-	if (h_opt == FALSE)
-		set_attr(&attrib, ATTR_h, NO_HOLD);
-	if (j_opt == FALSE)
-		set_attr(&attrib, ATTR_j, NO_JOIN);
-	if (k_opt == FALSE)
-		set_attr(&attrib, ATTR_k, NO_KEEP);
-	if (m_opt == FALSE)
-		set_attr(&attrib, ATTR_m, MAIL_AT_ABORT);
-	if (p_opt == FALSE)
-		set_attr(&attrib, ATTR_p, "0");
-	if (r_opt == FALSE)
-		set_attr(&attrib, ATTR_r, "TRUE");
-}
-
 /**
  * @brief
  *	prints the usage format for qsub
@@ -4769,6 +4778,10 @@ print_usage()
 	fprintf(stderr, "%s", usag2);
 }
 
+
+/*
+ * The following bunch of functions support the "Daemon" capability of qsub.
+ */
 
 /**
  * @brief
@@ -4868,10 +4881,6 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list, char *retmsg)
 	}
 	return 0;
 }
-
-/*
- * The following bunch of functions support the "Daemon" capability of qsub.
- */
 
 #ifdef WIN32
 /*
