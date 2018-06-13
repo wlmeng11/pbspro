@@ -1309,33 +1309,6 @@ strdup_esc_commas(char *str_to_dup)
 	return (returnstr);
 }
 
-/**
- * @brief
- *	sets directory prefix
- *
- * @param[in] prefix - string to be prefixed
- * @param[in] diropt - boolean value indicating directory prefix to be set or not
- *
- * @return String
- * @retval Success - pbs directory prefix
- * @retval Failure - NULL
- *
- */
-char *
-set_dir_prefix(char *prefix, int diropt)
-{
-	char *s;
-
-	if (notNULL(prefix))
-		return (prefix);
-	else if (diropt != FALSE)
-		return ("");
-	else if ((s = getenv("PBS_DPREFIX")) != NULL)
-		return (s);
-	else
-		return (PBS_DPREFIX_DEFAULT);
-}
-
 /*
  * The following bunch of functions support the "Interactive Job"
  * capability of PBS.
@@ -1964,6 +1937,41 @@ x11handler(int X_data_socket, int interactive_reader_socket)
 		interactive_reader_socket, reader_Xjob, log_cmds_portfw_msg);
 }
 
+/**
+ * @brief
+ *  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified.
+ */
+static void
+enable_gui(void)
+{
+#ifndef WIN32 /* Unix */
+	char *x11authstr = NULL;
+	if (Forwardx11_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
+			exit_qsub(1);
+		}
+		/* get the DISPLAY's auth protocol, hexdata, and screen number */
+		if ((x11authstr = x11_get_authstring()) != NULL) {
+			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
+			set_attr(&attrib, ATTR_X11_port, port_X11());
+#ifdef DEBUG
+			fprintf(stderr, "x11auth string: %s\n", x11authstr);
+#endif
+		} else {
+			exit_qsub(1);
+		}
+	}
+#else /* Windows */
+	if (gui_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
+			exit_qsub(1);
+		}
+		set_attr(&attrib, ATTR_GUI, "TRUE");
+	}
+#endif
+}
 
 /**
  * @brief
@@ -2688,6 +2696,10 @@ err:
  ** End of "Block Job" functions.
  */
 
+/*
+ * The following bunch of functions support the "Kerberos Authentication"
+ * capability of PBS.
+ */
 
 #ifdef	PBS_CRED_DCE_KRB5
 
@@ -3141,6 +3153,7 @@ done:
 #endif	/* PBS_CRED_GRIDPROXY */
 	return ret;
 }
+
 /**
  * @brief
  *	gets the des password and encrypts
@@ -3178,6 +3191,16 @@ get_passwd()
 #endif
 	return ret;
 }
+
+/*
+ * End of "Kerberos Authentication" functions.
+ */
+
+/*
+ * TODO
+ * The following bunch of functions support the "TODO"
+ * functionality of qsub.
+ */
 
 /**
  * @brief
@@ -4083,6 +4106,33 @@ get_script(FILE *file, char *script, char *prefix)
 
 /**
  * @brief
+ *	sets directory prefix
+ *
+ * @param[in] prefix - string to be prefixed
+ * @param[in] diropt - boolean value indicating directory prefix to be set or not
+ *
+ * @return String
+ * @retval Success - pbs directory prefix
+ * @retval Failure - NULL
+ *
+ */
+char *
+set_dir_prefix(char *prefix, int diropt)
+{
+	char *s;
+
+	if (notNULL(prefix))
+		return (prefix);
+	else if (diropt != FALSE)
+		return ("");
+	else if ((s = getenv("PBS_DPREFIX")) != NULL)
+		return (s);
+	else
+		return (PBS_DPREFIX_DEFAULT);
+}
+
+/**
+ * @brief
  * Read the job script from a file or stdin.
  *
  * @param[in] script - path of job script to read from
@@ -4156,42 +4206,6 @@ read_job_script(char * const script)
 			exit_qsub(8);
 		}
 	}
-}
-
-/**
- * @brief
- *  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified.
- */
-static void
-enable_gui(void)
-{
-#ifndef WIN32 /* Unix */
-	char *x11authstr = NULL;
-	if (Forwardx11_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
-			exit_qsub(1);
-		}
-		/* get the DISPLAY's auth protocol, hexdata, and screen number */
-		if ((x11authstr = x11_get_authstring()) != NULL) {
-			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
-			set_attr(&attrib, ATTR_X11_port, port_X11());
-#ifdef DEBUG
-			fprintf(stderr, "x11auth string: %s\n", x11authstr);
-#endif
-		} else {
-			exit_qsub(1);
-		}
-	}
-#else /* Windows */
-	if (gui_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
-			exit_qsub(1);
-		}
-		set_attr(&attrib, ATTR_GUI, "TRUE");
-	}
-#endif
 }
 
 /**
@@ -4772,8 +4786,7 @@ print_usage()
  *
  */
 static int
-handle_attribute_errors(struct ecl_attribute_errors *err_list,
-	char *retmsg)
+handle_attribute_errors(struct ecl_attribute_errors *err_list, char *retmsg)
 {
 	struct attropl *attribute;
 	char * opt;
@@ -4853,6 +4866,10 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list,
 	}
 	return 0;
 }
+
+/*
+ * The following bunch of functions support the "Daemon" capability of qsub.
+ */
 
 #ifdef WIN32
 /*
@@ -5116,179 +5133,7 @@ regular_submit(const int daemon_up)
 	return rc;
 }
 
-int
-main(int argc, char **argv, char **envp)   /* qsub */
-{
-	int errflg;                         /* option error */
-	static char script[MAXPATHLEN+1] = "";   /* name of script file */
-	char *q_n_out;                      /* queue part of destination */
-	char *s_n_out;                      /* server part of destination */
-	/* server:port to send request to */
-	char *cmdargs = NULL;
-	int command_flag = 0;
-	int rc; /* error code for submit */
-	int do_regular_submit = 1; /* used if daemon based submit fails */
-#ifdef WIN32 /* Windows */
-	char qsub_exe[MAXPATHLEN+1];
-#else /* Unix */
-	int daemon_up = 0;
-#endif
-
-	/* Set signal handlers */
-	set_sig_handlers();
-
-	/*
-	 * Print version info and exit, if specified with --version option.
-	 * Otherwise, proceed normally.
-	 */
-	execution_mode(argc, argv);
-
-	/*
-	 * Identify the configured tmpdir without calling pbs_loadconf().
-	 * We do not want to incur the cost of parsing the services DB.
-	 */
-	tmpdir = pbs_get_tmpdir();
-	if (tmpdir == NULL) {
-		fprintf(stderr, "qsub: Failed to load configuration parameters!\n");
-		exit_qsub(2);
-	}
-
 #ifdef WIN32
-	/*
-	 * In windows, the foreground qsub process does a createprocess of the
-	 * same executable (since there is no equivalent of fork). It calls the
-	 * child qsub with parameters "--daemon" as the first parameter. This
-	 * check here ensures that this invocation of qsub was to make it a
-	 * background process and not a user invocation. The --daemon parameter
-	 * is not documented to the user (or part of the syntax printed).
-	 * The parameters that are passed on to the child qsub process:
-	 * 1) --daemon --> Signifying that it is to become a daemon process
-	 * 2) Named Pipe Name --> Name of the named pipe on which to communicate
-	 * 3) Handle to synchronization event
-	 * 4) Name of the target server, if any, else NULL/empty
-	 *
-	 */
-	if ((argc == 4 || argc == 5) && (strcasecmp(argv[1], "--daemon")==0)) {
-		if (argc == 4)
-			do_daemon_stuff(argv[2], argv[3], NULL);
-		else
-			do_daemon_stuff(argv[2], argv[3], argv[4]);
-		exit(0);
-	}
-
-	strcpy(qsub_exe, argv[0]); /* note the name of the qsub executable */
-#endif
-
-
-	/*
-	 * If qsub command is submitted with arguments, then capture them and
-	 * encode in XML format using encode_xml_arg_list() and set the
-	 * "Submit_arguments" job attribute.
-	 */
-	if ((argc >= 2) && (cmdargs = encode_xml_arg_list(1, argc, argv))) {
-		set_attr(&attrib, ATTR_submit_arguments, cmdargs);
-		free(cmdargs);
-		cmdargs = NULL;
-	}
-
-	/* Process options */
-	errflg = process_opts(argc, argv, CMDLINE);  /* get cmd-line options */
-	if (errflg) {
-		print_usage();
-		exit_qsub  (2);
-	}
-	/* Process special arguments */
-	command_flag = process_special_args(argc, argv, script);
-
-#ifdef WIN32
-	back2forward_slash(script);
-#endif
-
-	if (command_flag == 0)
-		/* Read the job script from a file or stdin */
-		read_job_script(script);
-
-	/* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
-	enable_gui();
-
-	/* Set option default values */
-	set_opt_defaults();
-
-	/* Parse destination string */
-	server_out[0] = '\0';
-	if (parse_destination_id(destination, &q_n_out, &s_n_out)) {
-		fprintf(stderr, "qsub: illegally formed destination: %s\n", destination);
-		(void)unlink(script_tmp);
-		exit_qsub(2);
-	} else if (notNULL(s_n_out)) {
-			strcpy(server_out, s_n_out);
-	}
-
-	/* Get required environment variables to be sent to the server. */
-	/* Must be done early here, as basic_envlist and qsub_envlist will */
-	/* be sent to the qsub daemon if needed */
-	basic_envlist = job_env_basic();
-	if (basic_envlist == NULL)
-		exit_qsub(3);
-	if (V_opt)
-		qsub_envlist = env_array_to_varlist(envp);
-
-	/*
-	 * Disable backgrounding if we are inside another qsub
-	 */
-	if (getenv(ENV_PBS_JOBID) != NULL)
-		no_background = 1;
-
-	/*
-	 * In case of interactive jobs, jobs with block=true, or no_background == 1,
-	 * qsub should fully execute from the foreground, so daemon_submit() is not called.
-	 * It should not fork, neither should it send the data to the background qsub.
-	 *
-	 * If all 3 of these options are zero, then try to submit via daemon.
-	 */
-	if ((Interact_opt || block_opt || no_background) == 0) {
-		/* Try to submit jobs using a daemon */
-#ifdef WIN32
-		rc = daemon_submit(qsub_exe, &do_regular_submit);
-#else
-		rc = daemon_submit(&daemon_up, &do_regular_submit);
-#endif
-	}
-
-	if (do_regular_submit == 1)
-		/* submission via daemon was not successful, so do regular submit */
-		rc = regular_submit(daemon_up);
-
-	/* remove temporary job script file */
-	(void)unlink(script_tmp);
-
-	if (rc == 0) { /* submit was successful */
-		new_jobname = retmsg;
-		if (!z_opt && Interact_opt == FALSE)
-			printf("%s\n", retmsg); /* print jobid with a \n */
-	} else {
-		/* error, print whatever our daemon gave us back */
-		fprintf(stderr, "%s", retmsg);
-		/* check if the retmsg has "qsub: illegal -" string, if so print usage */
-		if (strstr(retmsg, "qsub: illegal -"))
-			print_usage();
-		exit_qsub(rc);
-	}
-
-	/* is this an interactive job ??? */
-	if (Interact_opt != FALSE)
-		interactive();
-	else if (block_opt) { /* block until job completes? */
-		fflush(stdout);
-		block();
-	}
-
-	exit_qsub(0);
-	return (0);
-} /* end of main() */
-
-#ifdef WIN32
-
 /**
  * @brief
  *	Get the filename to be used for communications. This is created by
@@ -5528,7 +5373,6 @@ error:
 }
 
 #else /* unix */
-
 /**
  * @brief
  *	Check whether a unix domain socket file is available.
@@ -6330,3 +6174,178 @@ get_conf_path()
 	}
 	return dup_cnf_path;
 }
+
+/*
+ * End of "Daemon" functions.
+ */
+
+int
+main(int argc, char **argv, char **envp)   /* qsub */
+{
+	int errflg;                         /* option error */
+	static char script[MAXPATHLEN+1] = "";   /* name of script file */
+	char *q_n_out;                      /* queue part of destination */
+	char *s_n_out;                      /* server part of destination */
+	/* server:port to send request to */
+	char *cmdargs = NULL;
+	int command_flag = 0;
+	int rc; /* error code for submit */
+	int do_regular_submit = 1; /* used if daemon based submit fails */
+#ifdef WIN32 /* Windows */
+	char qsub_exe[MAXPATHLEN+1];
+#else /* Unix */
+	int daemon_up = 0;
+#endif
+
+	/* Set signal handlers */
+	set_sig_handlers();
+
+	/*
+	 * Print version info and exit, if specified with --version option.
+	 * Otherwise, proceed normally.
+	 */
+	execution_mode(argc, argv);
+
+	/*
+	 * Identify the configured tmpdir without calling pbs_loadconf().
+	 * We do not want to incur the cost of parsing the services DB.
+	 */
+	tmpdir = pbs_get_tmpdir();
+	if (tmpdir == NULL) {
+		fprintf(stderr, "qsub: Failed to load configuration parameters!\n");
+		exit_qsub(2);
+	}
+
+#ifdef WIN32
+	/*
+	 * In windows, the foreground qsub process does a createprocess of the
+	 * same executable (since there is no equivalent of fork). It calls the
+	 * child qsub with parameters "--daemon" as the first parameter. This
+	 * check here ensures that this invocation of qsub was to make it a
+	 * background process and not a user invocation. The --daemon parameter
+	 * is not documented to the user (or part of the syntax printed).
+	 * The parameters that are passed on to the child qsub process:
+	 * 1) --daemon --> Signifying that it is to become a daemon process
+	 * 2) Named Pipe Name --> Name of the named pipe on which to communicate
+	 * 3) Handle to synchronization event
+	 * 4) Name of the target server, if any, else NULL/empty
+	 *
+	 */
+	if ((argc == 4 || argc == 5) && (strcasecmp(argv[1], "--daemon")==0)) {
+		if (argc == 4)
+			do_daemon_stuff(argv[2], argv[3], NULL);
+		else
+			do_daemon_stuff(argv[2], argv[3], argv[4]);
+		exit(0);
+	}
+
+	strcpy(qsub_exe, argv[0]); /* note the name of the qsub executable */
+#endif
+
+
+	/*
+	 * If qsub command is submitted with arguments, then capture them and
+	 * encode in XML format using encode_xml_arg_list() and set the
+	 * "Submit_arguments" job attribute.
+	 */
+	if ((argc >= 2) && (cmdargs = encode_xml_arg_list(1, argc, argv))) {
+		set_attr(&attrib, ATTR_submit_arguments, cmdargs);
+		free(cmdargs);
+		cmdargs = NULL;
+	}
+
+	/* Process options */
+	errflg = process_opts(argc, argv, CMDLINE);  /* get cmd-line options */
+	if (errflg) {
+		print_usage();
+		exit_qsub  (2);
+	}
+	/* Process special arguments */
+	command_flag = process_special_args(argc, argv, script);
+
+#ifdef WIN32
+	back2forward_slash(script);
+#endif
+
+	if (command_flag == 0)
+		/* Read the job script from a file or stdin */
+		read_job_script(script);
+
+	/* Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified */
+	enable_gui();
+
+	/* Set option default values */
+	set_opt_defaults();
+
+	/* Parse destination string */
+	server_out[0] = '\0';
+	if (parse_destination_id(destination, &q_n_out, &s_n_out)) {
+		fprintf(stderr, "qsub: illegally formed destination: %s\n", destination);
+		(void)unlink(script_tmp);
+		exit_qsub(2);
+	} else if (notNULL(s_n_out)) {
+			strcpy(server_out, s_n_out);
+	}
+
+	/* Get required environment variables to be sent to the server. */
+	/* Must be done early here, as basic_envlist and qsub_envlist will */
+	/* be sent to the qsub daemon if needed */
+	basic_envlist = job_env_basic();
+	if (basic_envlist == NULL)
+		exit_qsub(3);
+	if (V_opt)
+		qsub_envlist = env_array_to_varlist(envp);
+
+	/*
+	 * Disable backgrounding if we are inside another qsub
+	 */
+	if (getenv(ENV_PBS_JOBID) != NULL)
+		no_background = 1;
+
+	/*
+	 * In case of interactive jobs, jobs with block=true, or no_background == 1,
+	 * qsub should fully execute from the foreground, so daemon_submit() is not called.
+	 * It should not fork, neither should it send the data to the background qsub.
+	 *
+	 * If all 3 of these options are zero, then try to submit via daemon.
+	 */
+	if ((Interact_opt || block_opt || no_background) == 0) {
+		/* Try to submit jobs using a daemon */
+#ifdef WIN32
+		rc = daemon_submit(qsub_exe, &do_regular_submit);
+#else
+		rc = daemon_submit(&daemon_up, &do_regular_submit);
+#endif
+	}
+
+	if (do_regular_submit == 1)
+		/* submission via daemon was not successful, so do regular submit */
+		rc = regular_submit(daemon_up);
+
+	/* remove temporary job script file */
+	(void)unlink(script_tmp);
+
+	if (rc == 0) { /* submit was successful */
+		new_jobname = retmsg;
+		if (!z_opt && Interact_opt == FALSE)
+			printf("%s\n", retmsg); /* print jobid with a \n */
+	} else {
+		/* error, print whatever our daemon gave us back */
+		fprintf(stderr, "%s", retmsg);
+		/* check if the retmsg has "qsub: illegal -" string, if so print usage */
+		if (strstr(retmsg, "qsub: illegal -"))
+			print_usage();
+		exit_qsub(rc);
+	}
+
+	/* is this an interactive job ??? */
+	if (Interact_opt != FALSE)
+		interactive();
+	else if (block_opt) { /* block until job completes? */
+		fflush(stdout);
+		block();
+	}
+
+	exit_qsub(0);
+	return (0);
+} /* end of main() */
