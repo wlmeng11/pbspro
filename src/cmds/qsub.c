@@ -4475,7 +4475,7 @@ job_env_basic(void)
 	} else
 		*s = '\0';
 
-#ifdef WIN32
+#ifdef WIN32 /* Windows */
 	osInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	if (GetVersionEx(&osInfo)) {
 		switch (osInfo.dwPlatformId) {
@@ -4489,12 +4489,14 @@ job_env_basic(void)
 				strcat(job_env, ",PBS_O_SYSTEM=VER_PLATFORM_WIN32_NT");
 				break;
 		}
-#else
+	}
+#else /* Unix */
 	if (uname(&uns) != -1) {
 		strcat(job_env, ",PBS_O_SYSTEM=");
 		strcat(job_env, uns.sysname);
+	}
 #endif
-	} else {
+	else {
 		perror("qsub: cannot get uname info:");
 		return NULL;
 	}
