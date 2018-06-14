@@ -203,33 +203,6 @@ char retmsg[MAXPATHLEN];
 /* global var to pass cwd to background qsub */
 char qsub_cwd[MAXPATHLEN + 1];
 
-/* new functions for the background qsub process */
-static int dosend(void *s, char *buf, int bufsize);
-static int dorecv(void *s, char *buf, int bufsize);
-static int send_opts(void *s);
-static int recv_opts(void *s);
-static int send_attrl(void *s, struct attrl *attrib);
-static int recv_attrl(void *s, struct attrl **attrib);
-static int send_string(void *s, char *str);
-static int recv_string(void *s, char *str);
-
-static int do_submit(char *retmsg);
-static int do_submit2(char *rmsg);
-static void get_comm_filename(char *fl);
-static char * get_conf_path();
-static void free_attrl(struct attrl *attrib);
-static struct attrl *dup_attrl(struct attrl *attrib);
-static int do_connect(char *server_out, char *retmsg);
-#ifdef WIN32
-static void do_daemon_stuff(char *server, char *handle, char *file);
-#else
-static void do_daemon_stuff(void);
-static int check_qsub_daemon(char *fl);
-static int fork_and_stay(void);
-#endif
-
-static char *copy_env_value(char *dest, char *pv, int quote_flg);
-
 
 struct attrl *attrib = NULL;
 struct attrl *attrib_o = NULL;
@@ -365,7 +338,6 @@ static char	passwd_buf[PBS_MAXPWLEN] = {'\0'};
 static char	pbs_o_env[] = "PBS_O_";
 static char	*tmpdir = NULL;
 
-
 /*
  * The following bunch of functions are "Utility" functions.
  */
@@ -455,6 +427,103 @@ comma_token(char *str)
 		}
 	}
 	return tok;
+}
+
+/**
+ * @brief
+ *      Copy an environment variable to a specified location
+ *
+ * @param[in]	dest	- The destination address
+ * @param[in]   pv	- The source address
+ * @param[in]   quote_flg - Whether quote characters should be escaped
+ *
+ * @return      char*
+ * @retval	NULL - Failure
+ * @retval      !NULL - Success - Pointer to pv parameter
+ */
+char *
+copy_env_value(char *dest, /* destination  */
+	char *pv, /* value string */
+	int quote_flg) /* non-zero then assume single word (quoting on) */
+{
+	int   go = 1;
+	int   q_ch = 0;
+	int   is_func = 0;
+	char  *dest_full = dest;
+
+	while (*dest)
+		++dest;
+
+	is_func = ((*pv == '(') && (*(pv+1) == ')') && (*(pv+2) == ' ') && (*(pv+3) == '{'));
+
+	/*
+	 * Keep the list of special characters consistent with encode_arst_bs()
+	 * and parse_comma_string_bs().
+	 */
+
+	while (go && *pv) {
+		switch (*pv) {
+			case '"':
+			case '\'':
+				if (q_ch) {	/* local quoting is in progress */
+					if (q_ch == (int)*pv) {
+						q_ch = 0;	/* end quote */
+					} else {
+						*dest++ = ESC_CHAR;	/* escape quote */
+						*dest++ = *pv;
+					}
+				} else if (quote_flg) {	  /* global quoting is on */
+					*dest++ = ESC_CHAR;	  /* escape quote */
+					*dest++ = *pv;
+				} else {
+					q_ch = (int)*pv;  /* turn local quoting on */
+				}
+				break;
+
+			case ESC_CHAR:			/* backslash in value, escape it */
+				*dest++ = *pv;
+				if (*(pv+1) != ',') /* do not escape if ESC_CHAR already escapes */
+					*dest++ = *pv;
+				break;
+
+			case ',':
+				if (q_ch || quote_flg) {
+					*dest++ = ESC_CHAR;
+					*dest++ = *pv;
+				} else if (dest_full != dest && *(dest-1) == ESC_CHAR) { /* the comma is escaped, not finished yet */
+					*dest++ = *pv;
+				} else {
+					go = 0;		/* end of value string */
+				}
+				break;
+
+			case ';':
+				*dest++ = *pv;
+				if (is_func && (*(pv+1) == '\n'))
+					pv++;
+				break;
+
+			case '\n':
+				if (is_func) {
+					*dest++ = ';';
+					*dest++ = ' ';
+				} else {
+					*dest++ = *pv;
+				}
+				break;
+
+			default:
+				*dest++ = *pv;
+				break;
+		}
+		pv++;
+	}
+
+	*dest = '\0';
+	if (q_ch)
+		return NULL;	/* error-unterminated quote */
+	else
+		return (pv);
 }
 
 /**
@@ -3795,103 +3864,6 @@ read_job_script(char * const script)
 
 /**
  * @brief
- *      Copy an environment variable to a specified location
- *
- * @param[in]	dest	- The destination address
- * @param[in]   pv	- The source address
- * @param[in]   quote_flg - Whether quote characters should be escaped
- *
- * @return      char*
- * @retval	NULL - Failure
- * @retval      !NULL - Success - Pointer to pv parameter
- */
-char *
-copy_env_value(char *dest, /* destination  */
-	char *pv, /* value string */
-	int quote_flg) /* non-zero then assume single word (quoting on) */
-{
-	int   go = 1;
-	int   q_ch = 0;
-	int   is_func = 0;
-	char  *dest_full = dest;
-
-	while (*dest)
-		++dest;
-
-	is_func = ((*pv == '(') && (*(pv+1) == ')') && (*(pv+2) == ' ') && (*(pv+3) == '{'));
-
-	/*
-	 * Keep the list of special characters consistent with encode_arst_bs()
-	 * and parse_comma_string_bs().
-	 */
-
-	while (go && *pv) {
-		switch (*pv) {
-			case '"':
-			case '\'':
-				if (q_ch) {	/* local quoting is in progress */
-					if (q_ch == (int)*pv) {
-						q_ch = 0;	/* end quote */
-					} else {
-						*dest++ = ESC_CHAR;	/* escape quote */
-						*dest++ = *pv;
-					}
-				} else if (quote_flg) {	  /* global quoting is on */
-					*dest++ = ESC_CHAR;	  /* escape quote */
-					*dest++ = *pv;
-				} else {
-					q_ch = (int)*pv;  /* turn local quoting on */
-				}
-				break;
-
-			case ESC_CHAR:			/* backslash in value, escape it */
-				*dest++ = *pv;
-				if (*(pv+1) != ',') /* do not escape if ESC_CHAR already escapes */
-					*dest++ = *pv;
-				break;
-
-			case ',':
-				if (q_ch || quote_flg) {
-					*dest++ = ESC_CHAR;
-					*dest++ = *pv;
-				} else if (dest_full != dest && *(dest-1) == ESC_CHAR) { /* the comma is escaped, not finished yet */
-					*dest++ = *pv;
-				} else {
-					go = 0;		/* end of value string */
-				}
-				break;
-
-			case ';':
-				*dest++ = *pv;
-				if (is_func && (*(pv+1) == '\n'))
-					pv++;
-				break;
-
-			case '\n':
-				if (is_func) {
-					*dest++ = ';';
-					*dest++ = ' ';
-				} else {
-					*dest++ = *pv;
-				}
-				break;
-
-			default:
-				*dest++ = *pv;
-				break;
-		}
-		pv++;
-	}
-
-	*dest = '\0';
-	if (q_ch)
-		return NULL;	/* error-unterminated quote */
-	else
-		return (pv);
-}
-
-/**
- * @brief
  *	Constructs the basic comma-separated environment variables
  *	list string for a PBS job.
  *
@@ -4504,92 +4476,6 @@ dosend(void *s, char *buf, int bufsize)
 
 /**
  * @brief
- *	Send the cmd opt values for each parameter supported by qsub to the
- *	background qsub process.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-send_opts(void *s)
-{
-	/*
-	 * we are allocating a fixed size of 100. This is because we know that
-	 * the list of opts to send is going to fit within 100. Specifically, for each
-	 * opt we need 2 characters, and currently we have 35 opts.
-	 * If a new set of opts are added, the buffer space of 100 allocated here
-	 * needs to be double checked.
-	 */
-	if (resize_buffer(0, 100) != 0)
-		return -1;
-
-	sprintf(buf,
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d ",
-		a_opt, c_opt, e_opt, h_opt, j_opt,
-		k_opt, l_opt, m_opt, o_opt, p_opt,
-		q_opt, r_opt, u_opt, v_opt, z_opt,
-		A_opt, C_opt, J_opt, M_opt, N_opt,
-		S_opt, V_opt, Depend_opt, Interact_opt, Stagein_opt,
-		Stageout_opt, Sandbox_opt, Grouplist_opt, Resvstart_opt,
-		Resvend_opt, pwd_opt, cred_opt, block_opt, P_opt,
-					relnodes_on_stageout_opt);
-
-	return (send_string(s, buf));
-}
-
-/**
- * @brief
- *	Recv the cmd opt values for each parameter supported by qsub from the
- *	foreground qsub process.
- *
- * @param[in]	s - pointer to the windows PIPE or Unix domain socket
- *
- * @return      int
- * @retval	-1 - Failure
- * @retval	 0 - Success
- *
- */
-static int
-recv_opts(void *s)
-{
-	/*
-	 * we are allocating a fixed size of 100. This is because we know that
-	 * the list of opts to send is going to fit within 100. Specifically, for each
-	 * opt we need 2 characters, and currently we have 35 opts.
-	 * If a new set of opts are added, the buffer space of 100 allocated here
-	 * needs to be double checked.
-	 */
-	if (resize_buffer(0, 100) != 0)
-		return -1;
-
-	if (recv_string(s, buf) != 0)
-		return -1;
-
-	sscanf(buf,
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d %d %d %d %d %d "
-		"%d %d %d %d %d ",
-		&a_opt, &c_opt, &e_opt, &h_opt, &j_opt,
-		&k_opt, &l_opt, &m_opt, &o_opt, &p_opt,
-		&q_opt, &r_opt, &u_opt, &v_opt, &z_opt,
-		&A_opt, &C_opt, &J_opt, &M_opt, &N_opt,
-		&S_opt, &V_opt, &Depend_opt, &Interact_opt, &Stagein_opt,
-		&Stageout_opt, &Sandbox_opt, &Grouplist_opt, &Resvstart_opt,
-		&Resvend_opt, &pwd_opt, &cred_opt, &block_opt, &P_opt,
-			&relnodes_on_stageout_opt);
-	return 0;
-}
-
-/**
- * @brief
  *	Send the attrl list to the background qsub process. This is the
  * 	attribute  list that was created by the foreground process based on
  *	the options that the user has provided to qsub.
@@ -4807,6 +4693,92 @@ recv_dyn_string(void *s, char **strp)
 
 /**
  * @brief
+ *	Send the cmd opt values for each parameter supported by qsub to the
+ *	background qsub process.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+send_opts(void *s)
+{
+	/*
+	 * we are allocating a fixed size of 100. This is because we know that
+	 * the list of opts to send is going to fit within 100. Specifically, for each
+	 * opt we need 2 characters, and currently we have 35 opts.
+	 * If a new set of opts are added, the buffer space of 100 allocated here
+	 * needs to be double checked.
+	 */
+	if (resize_buffer(0, 100) != 0)
+		return -1;
+
+	sprintf(buf,
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d ",
+		a_opt, c_opt, e_opt, h_opt, j_opt,
+		k_opt, l_opt, m_opt, o_opt, p_opt,
+		q_opt, r_opt, u_opt, v_opt, z_opt,
+		A_opt, C_opt, J_opt, M_opt, N_opt,
+		S_opt, V_opt, Depend_opt, Interact_opt, Stagein_opt,
+		Stageout_opt, Sandbox_opt, Grouplist_opt, Resvstart_opt,
+		Resvend_opt, pwd_opt, cred_opt, block_opt, P_opt,
+					relnodes_on_stageout_opt);
+
+	return (send_string(s, buf));
+}
+
+/**
+ * @brief
+ *	Recv the cmd opt values for each parameter supported by qsub from the
+ *	foreground qsub process.
+ *
+ * @param[in]	s - pointer to the windows PIPE or Unix domain socket
+ *
+ * @return      int
+ * @retval	-1 - Failure
+ * @retval	 0 - Success
+ *
+ */
+static int
+recv_opts(void *s)
+{
+	/*
+	 * we are allocating a fixed size of 100. This is because we know that
+	 * the list of opts to send is going to fit within 100. Specifically, for each
+	 * opt we need 2 characters, and currently we have 35 opts.
+	 * If a new set of opts are added, the buffer space of 100 allocated here
+	 * needs to be double checked.
+	 */
+	if (resize_buffer(0, 100) != 0)
+		return -1;
+
+	if (recv_string(s, buf) != 0)
+		return -1;
+
+	sscanf(buf,
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d %d %d %d %d %d "
+		"%d %d %d %d %d ",
+		&a_opt, &c_opt, &e_opt, &h_opt, &j_opt,
+		&k_opt, &l_opt, &m_opt, &o_opt, &p_opt,
+		&q_opt, &r_opt, &u_opt, &v_opt, &z_opt,
+		&A_opt, &C_opt, &J_opt, &M_opt, &N_opt,
+		&S_opt, &V_opt, &Depend_opt, &Interact_opt, &Stagein_opt,
+		&Stageout_opt, &Sandbox_opt, &Grouplist_opt, &Resvstart_opt,
+		&Resvend_opt, &pwd_opt, &cred_opt, &block_opt, &P_opt,
+			&relnodes_on_stageout_opt);
+	return 0;
+}
+
+/**
+ * @brief
  *	Handles the attribute errors listed from the ECL layer
  *	by iterating through the err_list parameter. It then
  *	compares the attribute name and sets and appropriate
@@ -4903,846 +4875,6 @@ handle_attribute_errors(struct ecl_attribute_errors *err_list, char *retmsg)
 	}
 	return 0;
 }
-
-#ifdef WIN32
-/*
- * @brief
- *  Try to submit job through daemon. On Windows, the daemon would be created
- *  by calling CreateProcess with the --daemon parameter during a prior
- *  invocation of the qsub command. The foreground qsub process tries to send
- *  the job to the daemon using a named pipe.
- *
- * @param[in]  qsub_exe          - Name of the qsub command to pass to CreateProcess
- * @param[out] do_regular_submit - Indicate whether to do regular submit
- * @return     rc                - Error code
- */
-static int
-daemon_submit(const char *qsub_exe, int *do_regular_submit)
-{
-	int rc = 0;
-	/* determine pipe name */
-	get_comm_filename(fl);
-
-	/*
-	 * we have determined the name of the Named pipe that should be
-	 * used to communicate between the qsub background and foreground
-	 * process. Now try to connect to the background qsub process using this
-	 * named pipe.
-	 *
-	 * If the connection succeeds, it means a background qsub process
-	 * already exists. Send data to the background process and wait for
-	 * result.
-	 *
-	 * If connection fails, create a background qsub process by doing
-	 * a createprocess of the same qsub executable, but with --daemon
-	 * parameter. Now, there could be a race between the background and the
-	 * foreground qsub processes. If the background process is slower to
-	 * startup and listen on the named pipe, the foreground process could
-	 * fail again on trying to connect to it, thus entering a vicious loop.
-	 * To avoid that, create a manual reset event and pass its handle to
-	 * the new child process. The foreground process waits on the event
-	 * object, till the background process is up, sets up the named pipe,
-	 * and signals this event to tell the foreground process to continue
-	 * and  try to connect to it via this new named pipe.
-	 */
-	HANDLE hFile;
-	SECURITY_ATTRIBUTES sa;
-	STARTUPINFO si = {sizeof(si)};
-	PROCESS_INFORMATION pi;
-	char cmd_line[2*MAXPATHLEN + 1];
-	int created = 0;
-	HANDLE hEvent;
-
-again:
-	hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-			OPEN_EXISTING, 0, NULL);
-	if (hFile == INVALID_HANDLE_VALUE) {
-		if (created == 0) {
-			sa.nLength = sizeof(sa);
-			sa.lpSecurityDescriptor = NULL;
-			sa.bInheritHandle = TRUE;
-
-			/* now create a named event to wait on later */
-			hEvent = CreateEvent(
-					&sa, /* default security attribute */
-					TRUE, /* manual-reset event */
-					FALSE, /* initial state = signaled */
-					NULL); /* unnamed event object */
-			if (hEvent == NULL)
-				return rc;
-
-			/* launch new qsub process, connect 2 server */
-			sa.bInheritHandle = FALSE;
-			sprintf(cmd_line, "%s --daemon %s %d %s",
-					qsub_exe, fl,
-					hEvent, server_out);
-			if (!CreateProcess(NULL, cmd_line, &sa, &sa,
-						TRUE, CREATE_NO_WINDOW, NULL,
-						NULL, &si, &pi)) {
-				CloseHandle(hEvent);
-				return rc;
-			}
-
-			/* now wait for single object */
-			/* foreground process wait a max 10 seconds */
-			rc = WaitForSingleObject(hEvent, 10 * 1000);
-			CloseHandle(hEvent);
-
-			if (rc != WAIT_OBJECT_0) /* timeout */
-				return rc;
-
-			created = 1;
-			goto again;
-		}
-	} else {
-		if ((send_attrl(hFile, attrib) == 0) &&
-				(send_string(hFile, destination) == 0) &&
-				(send_string(hFile, script_tmp) == 0) &&
-				(send_string(hFile, cred_name) == 0) &&
-#if defined(PBS_PASS_CREDENTIALS)
-				(send_string(hFile, passwd_buf) == 0) &&
-#endif
-				(send_string(hFile, v_value?v_value:"") == 0) &&
-				(send_string(hFile, basic_envlist) == 0) &&
-				(send_string(hFile, qsub_envlist?qsub_envlist:"") == 0) &&
-				(send_string(hFile, qsub_cwd) == 0) &&
-				(send_opts(hFile) == 0)) {
-			/*
-			 * we were able to send data to the background qsub.
-			 * Now, even if we fail to read back response from
-			 * background, we do not want to submit again.
-			 */
-			*do_regular_submit = 0;
-
-			/* read back response from background qsub */
-			if ((recv_string(hFile, retmsg) != 0) ||
-					(dorecv(hFile, &rc, sizeof(int)) != 0)) {
-
-				/* Something bad happened, either background submitted
-				 * and failed to send us response, or it failed before
-				 * submitting.
-				 */
-				rc = -1;
-				sprintf(retmsg, "Failed to recv data from background qsub\n");
-				/* fall through to print the error message */
-			}
-		}
-		FlushFileBuffers(hFile);
-		CloseHandle(hFile);
-	}
-	return rc;
-}
-#else
-/*
- * @brief
- *  Try to submit job through daemon. On Unix, the daemon would be created by
- *  forking during a prior invocation of the qsub command. The foregound qsub
- *  process tries to send the job to the daemon using Unix domain sockets.
- *
- * @param[out] daemon_up         - Indicate whether daemon is running
- * @param[out] do_regular_submit - Indicate whether to do regular submit
- * @return     rc                - Error code
- */
-static int
-daemon_submit(int *daemon_up, int *do_regular_submit)
-{
-	int    sock; /* UNIX domain socket for talking to daemon */
-	struct sockaddr_un   s_un;
-	sigset_t newsigmask;
-	int rc = 0;
-again:
-	/*
-	 * In case of Unix, use fork. Foreground checks if connection is
-	 * possible with background daemon. The communication used is unix
-	 * domain sockets. Only the specified user can connect to this socket
-	 * since the domain socket is created with a 0600 permission.
-	 *
-	 * If connection fails, proceed with qsub in the normal flow, and at
-	 * the end fork and stay in the background, while the foreground
-	 * process returns control to the shell. Subsequent qsubs will be able
-	 * to connect to this forked background qsub.
-	 *
-	 */
-	*daemon_up = check_qsub_daemon(fl);
-	if (*daemon_up == 1) {
-		/* pass information to daemon */
-		/* wait for job-id or error string */
-		if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-			return rc;
-
-		s_un.sun_family = AF_UNIX;
-		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
-		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
-			int	refused = (errno == ECONNREFUSED);
-
-			close(sock);
-			if (refused) {
-				/* daemon unavailable, del temp file, restart */
-				if (unlink(fl) != 0)
-					return rc;
-
-				goto again;
-			}
-			return rc;
-		}
-
-		/* block SIGPIPE on write() failures. */
-		sigemptyset(&newsigmask);
-		sigaddset(&newsigmask, SIGPIPE);
-		sigprocmask(SIG_BLOCK, &newsigmask, NULL);
-
-		if ((send_attrl(&sock, attrib) == 0) &&
-			(send_string(&sock, destination) == 0) &&
-			(send_string(&sock, script_tmp) == 0) &&
-			(send_string(&sock, cred_name) == 0) &&
-#if defined(PBS_PASS_CREDENTIALS)
-			(send_string(&sock, passwd_buf) == 0) &&
-#endif
-			(send_string(&sock, v_value?v_value:"") == 0) &&
-			(send_string(&sock, basic_envlist) == 0) &&
-			(send_string(&sock, qsub_envlist?qsub_envlist:"") == 0) &&
-			(send_string(&sock, qsub_cwd) == 0) &&
-			(send_opts(&sock) == 0)) {
-
-			/* read back the first error code from the background
-			 * which confirms whether the background received our data
-			 */
-			if (dorecv(&sock, (char *) &rc, sizeof(int)) == 0) {
-				/*
-				 * we were able to send data to the background daemon.
-				 * Now, even if we fail to read back response from
-				 * background, we do not want to submit again.
-				 */
-				*do_regular_submit = 0;
-			}
-
-			/* read back response from background daemon */
-			if ((recv_string(&sock, retmsg) != 0) ||
-				dorecv(&sock, (char *) &rc, sizeof(int)) != 0) {
-
-				/* Something bad happened, either background submitted
-				 * and failed to send us response, or it failed before
-				 * submitting.
-				 */
-				rc = -1;
-				sprintf(retmsg, "Failed to recv data from background qsub\n");
-				/* fall through to print the error message */
-			}
-		}
-		/* going down, no need to free stuff */
-		close(sock);
-	}
-	return rc;
-}
-#endif
-
-/*
- * @brief
- *  Perform a regular submit, without the daemon.
- *
- * @param[in] daemon_up - Indicates whether daemon is running
- * @return    rc        - Error code
- */
-static int
-regular_submit(const int daemon_up)
-{
-	int rc = 0;
-	rc = do_connect(server_out, retmsg);
-	if (rc == 0) {
-		if (sd_svr != -1) {
-#if defined(PBS_PASS_CREDENTIALS)
-			if (passwd_buf[0] != '\0')
-				pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
-#endif
-			rc = do_submit2(retmsg);
-		}
-		else
-			rc = -1;
-	}
-#ifndef WIN32
-	if ((rc == 0) && !(Interact_opt != FALSE || block_opt) && (daemon_up == 0) && (no_background == 0))
-		fork_and_stay();
-#endif
-	return rc;
-}
-
-#ifdef WIN32
-/**
- * @brief
- *	Get the filename to be used for communications. This is created by
- *	appending the target server name and the user login name to a filename.
- *
- * @param[out]	fl - The filename used for the communication pipe/socket for
- *			the communication between background and forground
- *			qsub processes.
- *
- * @return      void
- *
- */
-static void
-get_comm_filename(char *fl)
-{
-	char *env_svr = getenv(PBS_CONF_SERVER_NAME);
-	char *env_port = getenv(PBS_CONF_BATCH_SERVICE_PORT);
-
-	sprintf(fl, "\\\\.\\pipe\\pipe_%s_%s_%s_%s_%s_%s",
-		((server_out == NULL || server_out[0] == 0)?
-		"default" : server_out),
-		getlogin(),
-		cred_name,
-		get_conf_path(),
-		(env_svr == NULL)?"":env_svr,
-		(env_port == NULL)?"":env_port
-		);
-}
-
-/**
- * @brief
- *	The windows implementation of the qsub daemon.
- *	This function creates a named pipe (CreateNamedPipe) and wait for a
- *	client to connect to it (ConnectNamedPipe). It uses OVERLAPPED IO to
- *	ensure that it does not block on ConnectNamedPipe. It continues and
- *	signals the event that was passed to parameter 2 of this function. This
- *	wakes up the waiting foreground process, which eventually calls
- *	CreateFile to connect to the named pipe. The function does a
- *	WaitForMultipleObjects to wait on two events: Either a connection close
- *	with the pbs_server or a client pipe connect request incoming. If
- *	neither happens within 60 seconds of waiting, this function times out
- *	and results in the background qsub process to quit silently.
- *
- *
- * @param[in]	fl - The filename used for the communication pipe/socket for
- *			the communication between background and forground
- *			qsub processes.
- * @param[in] handle - Handle to synchronization event between foreground and
- *			background qsub processes.
- * @param[in] server - Target server name of NULL in case of default
- *
- */
-void
-do_daemon_stuff(char *file, char *handle, char *server)
-{
-	HANDLE hPipe;
-	int rc, pipeRc;
-	HANDLE hEvent, hEventParent;
-	HANDLE hSockEvent;
-	OVERLAPPED oOverlap;
-	int svr_sock = -1;
-	HANDLE handles[2];
-	time_t connect_time = 0;
-	time_t cred_connect_time = time(0); /* Record current time to compare against the credential timeout value of 30 mins */
-
-	sd_svr = -1; /* not connected */
-	hEventParent = atoi(handle);
-	if (hEventParent == -1)
-		goto error;
-
-	hEvent = CreateEvent(
-		NULL, /* default security attribute */
-		TRUE, /* manual-reset event */
-		FALSE, /* initial state = signaled */
-		NULL); /* unnamed event object */
-	if (hEvent == NULL)
-		goto error;
-
-	hSockEvent = WSACreateEvent();
-	if (hSockEvent == NULL)
-		goto error;
-
-	oOverlap.hEvent = hEvent;
-	hPipe = CreateNamedPipe(file,
-		PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-		PIPE_UNLIMITED_INSTANCES,
-		BUFSIZE, /* output buffer size */
-		BUFSIZE, /* input buffer size */
-		PIPE_TIMEOUT, /* client time-out */
-		NULL); /* no security attribute */
-	if (hPipe == INVALID_HANDLE_VALUE)
-		goto error;
-
-	/* set single threaded mode */
-	pbs_client_thread_set_single_threaded_mode();
-
-	while (1) {
-		if (!ConnectNamedPipe(hPipe, &oOverlap)) {
-			pipeRc = GetLastError();
-			if (pipeRc == ERROR_IO_PENDING) {
-				if (svr_sock == -1) { /* first time */
-					if (SetEvent(hEventParent) == 0)
-						goto error;
-					/* do wait for single object */
-					rc = WaitForSingleObject(hEvent,
-						QSUB_DMN_TIMEOUT_LONG * 1000);
-					if (rc != WAIT_OBJECT_0)
-						goto out; /* timeout */
-				} else {
-					/*
-					 * wait for both server connection
-					 * and client pipe
-					 */
-					if (!WSAResetEvent(hSockEvent))
-						goto error;
-					if (!ResetEvent(hEvent))
-						goto error;
-
-					if (WSAEventSelect(svr_sock, hSockEvent,
-						FD_CLOSE | FD_READ) != 0)
-						goto error;
-
-				       /*
-			 		* check if we are past the credential timeout
-			 		* Error out even if it is close to CREDENTIAL_LIFETIME, as
-			 		* request could take a while to reach server and get processed
-			 		* Qsub then does a regular submit (new connection)
-			 		*/
-					if ((time(0) - cred_connect_time) > (CREDENTIAL_LIFETIME - QSUB_DMN_TIMEOUT_LONG))
-                                		goto error;
-
-					handles[0] = hEvent;
-					handles[1] = hSockEvent;
-					rc = WaitForMultipleObjects(2, handles,
-						FALSE, QSUB_DMN_TIMEOUT_LONG * 1000);
-					if (rc == WAIT_FAILED)
-						goto error;
-					if (rc == WAIT_TIMEOUT)
-						goto out;
-					if (rc == WAIT_OBJECT_0 + 1) {
-						if (recv(svr_sock, &rc, 1,
-							MSG_OOB) < 1) {
-							goto out;
-						}
-					}
-				}
-			} else if (pipeRc != ERROR_PIPE_CONNECTED)
-				goto error;
-		}
-
-		if ((recv_attrl(hPipe, &attrib) != 0) ||
-			(recv_string(hPipe, destination) != 0) ||
-			(recv_string(hPipe, script_tmp) != 0) ||
-			(recv_string(hPipe, cred_name) != 0) ||
-#if defined(PBS_PASS_CREDENTIALS)
-			(recv_string(hPipe, passwd_buf) != 0) ||
-#endif
-			(recv_dyn_string(hPipe, &v_value) != 0) ||
-			(recv_dyn_string(hPipe, &basic_envlist) != 0) ||
-			(recv_dyn_string(hPipe, &qsub_envlist) != 0) ||
-			(recv_string(hPipe, qsub_cwd) !=0) ||
-			(recv_opts(hPipe) != 0))
-			goto error;
-
-#if defined(PBS_PASS_CREDENTIALS)
-		if (passwd_buf[0] != '\0')
-			pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_len, &cred_buf);
-#endif
-		/* set the current work directory by doing a chdir */
-		if (_chdir(qsub_cwd) != 0)
-			goto error;
-
-		if (setenv("PWD", qsub_cwd, 1) != 0)
-			goto error;
-
-		if (sd_svr == -1) {
-			rc = do_connect(server, retmsg);
-			connect_time = time(0);
-		}
-
-		if (sd_svr != -1) {
-			svr_sock = pbs_connection_getsocket(sd_svr);
-			rc = do_submit2(retmsg);
-		}
-
-		if (send_string(hPipe, retmsg) != 0)
-			goto error;
-
-		if (dosend(hPipe, &rc, sizeof(int)) != 0)
-			goto error;
-
-		FlushFileBuffers(hPipe);
-		DisconnectNamedPipe(hPipe);
-
-		if (sd_svr == -1)
-			goto out;
-
-		free_attrl(attrib);
-		attrib = NULL;
-
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
-
-		if (cred_buf != NULL) {
-			memset(cred_buf, 0, cred_len);
-			free(cred_buf);
-			cred_buf = NULL;
-		}
-#if defined(PBS_PASS_CREDENTIALS)
-		memset(passwd_buf, 0, PBS_MAXPWLEN);
-#endif
-	}
-out:
-	DisconnectNamedPipe(hPipe);
-	CloseHandle(hPipe);
-	exit(0);
-
-error:
-#ifdef DEBUG
-	printLastError();
-#endif
-	ResetEvent(hEvent); /* reset event to wake up waiting client anyway */
-	DisconnectNamedPipe(hPipe);
-	CloseHandle(hPipe);
-	exit(1);
-}
-
-#else /* unix */
-/**
- * @brief
- *	Check whether a unix domain socket file is available.
- *	That is an indication that a background qsub might already be running.
- *
- * @param[out]	fl - The filename used for the communication pipe/socket for
- *			the communication between background and forground
- *			qsub processes.
- *
- * @return      int
- * @retval	0 - Not available
- * @retval	1 - available
- *
- */
-int
-check_qsub_daemon(char *fl)
-{
-	get_comm_filename(fl);
-	if (access(fl, F_OK) == 0) {
-		/* check if file is usable */
-		return 1;
-	}
-	return 0;
-}
-
-/**
- * @brief
- *	Fork the current process. Call the do_daemon_stuff function in the
- *	child process which starts listening on the unix domain socket etc.
- *	The parent process continues out of this function and eventually
- *	returns back control to the calling shell.
- *
- * @return error code
- * @retval 0 Success
- * exits program on failure
- *
- */
-static int
-fork_and_stay(void)
-{
-	int pid;
-
-	pid = fork();
-	if (pid == 0) {
-
-		/*
-		 * Try to become the session leader.
-		 * If that fails, exit with a syslog message
-		 */
-		if (setsid() == -1) {
-			log_syslog("setsid failed");
-			exit(1);
-		}
-
-		/*
-		 * just close standard files, we don't want to
-		 * be session leader or close all other files
-		 */
-		(void) fclose(stdin);
-		(void) fclose(stdout);
-		(void) fclose(stderr);
-
-		/* clear off all the attributes */
-		free_attrl(attrib);
-		attrib = NULL;
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
-
-		/* set single threaded mode */
-		pbs_client_thread_set_single_threaded_mode();
-
-		do_daemon_stuff();
-		/* control should never reach here */
-		/* still adding an exit, so it does not traverse parent code */
-		exit(1);
-	}
-	/* parent code */
-	return 0;
-}
-
-/**
- * @brief
- *	Sets the filename to be used for the unix domain socket based comm.
- *	This is formed by appending the UID and the target server name to the
- *	filename.
- *
- * @param[out] fl - The filename in tmpdir that is used as the unix domain socket
- *			file.
- *
- */
-static void
-get_comm_filename(char *fl)
-{
-	char *env_svr = getenv(PBS_CONF_SERVER_NAME);
-	char *env_port = getenv(PBS_CONF_BATCH_SERVICE_PORT);
-
-	sprintf(fl, "%s/pbs_%s_%lu_%s_%s_%s_%s",
-		tmpdir,
-		((server_out == NULL || server_out[0] == 0) ?
-		"default" : server_out),
-		(unsigned long int)getuid(),
-		cred_name,
-		get_conf_path(),
-		(env_svr == NULL)?"":env_svr,
-		(env_port == NULL)?"":env_port
-		);
-}
-
-/**
- * @brief
- *	The do_daemon_stuff Unix counterpart.
- *	It creates a unix domain socket server and starts listening on it.
- *	The umask is set to 077 so that the domain socket file is owned and
- *	accessible by the user executing qsub only. Once a client (foreground
- *	qsub) connects, it receives all the data from the foreground qsub and
- *	executes do_submit, on the pre-established connection to pbs_server.
- *	The connection to server was estiblished by the caller of this function
- *	by calling do_connect().
- *	This function also does a "select" wait on input of data from foreground
- *	qsub processes, and a close notification on the socket with pbs_server.
- *	The select breaks if foreground qsubs connect, the pbs_server dies, or
- *	the timeout of 1 minutes expires. For the latter two cases, this function
- *	does a silent exit of the background qsub daemon.
- *
- */
-static void
-do_daemon_stuff(void)
-{
-	int sock, bindfd;
-	int svr_sock;
-	struct sockaddr_un s_un;
-	struct sockaddr from;
-	socklen_t fromlen;
-	int rc;
-	fd_set readset;
-	fd_set workset;
-	struct timeval timeout;
-	int n, maxfd;
-	mode_t cmask = 0077;
-	time_t connect_time = time(0);
-	sigset_t newsigmask, oldsigmask;
-	char *err_op = "";
-	char log_buf[LOG_BUF_SIZE];
-	int cred_timeout = 0;
-
-	/* set umask so socket file created is only accessible by same user */
-	umask(cmask);
-	sigemptyset(&newsigmask);
-	sigaddset(&newsigmask, SIGPIPE);
-	sigprocmask(SIG_BLOCK, &newsigmask, NULL);
-
-	/* start up a unix domain socket to listen */
-	if ((bindfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-		err_op = "socket";
-		goto error;
-	}
-
-	s_un.sun_family = AF_UNIX;
-	(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
-	if (bind(bindfd, (const struct sockaddr *) &s_un, sizeof(s_un)) == -1)
-		exit(1); /* dont go to error */
-
-	FD_ZERO(&readset);
-	svr_sock = pbs_connection_getsocket(sd_svr);
-	if (listen(bindfd, 1) != 0) {
-		err_op = "listen";
-		goto error;
-	}
-
-	FD_SET(bindfd, &readset);
-	FD_SET(svr_sock, &readset);
-	maxfd = (bindfd > svr_sock) ? bindfd : svr_sock;
-	while (1) {
-
-		err_op = "";
-
-		memcpy(&workset, &readset, sizeof(readset));
-
-		timeout.tv_usec = 0;
-		/* since timeout gets reset on Linux */
-		if (cred_timeout == 1)
-			timeout.tv_sec = QSUB_DMN_TIMEOUT_SHORT; /* Short timeout to allow any foreground process to finsih before exiting */
-		else
-			timeout.tv_sec = QSUB_DMN_TIMEOUT_LONG;
-		n = select(maxfd + 1, &workset, NULL, NULL, &timeout);
-		if (n == 0)
-			goto out; /* daemon timed out waiting for connect from foreground */
-		else if (n == -1) {
-			err_op = "select failed";
-			goto error;
-		}
-
-		/*
-		 * check if we are past the credential timeout
-		 * Error out even if it is close to CREDENTIAL_LIFETIME, as
-		 * request could take a while to reach server and get processed
-		 * Qsub then does a regular submit (new connection)
-		 */
-		if (cred_timeout == 0 && ((time(0) - connect_time) > (CREDENTIAL_LIFETIME - QSUB_DMN_TIMEOUT_LONG))) {
-	                unlink(fl);
-			cred_timeout = 1;
-		}
-
-		if (FD_ISSET(svr_sock, &workset)) {
-			if (recv(svr_sock, &rc, 1, MSG_OOB) < 1)
-				goto out;
-		}
-
-		/* accept the connection */
-		fromlen = sizeof(from);
-		if ((sock = accept(bindfd, &from, &fromlen)) == -1) {
-			err_op = "accept";
-			goto error;
-		}
-
-		if ((recv_attrl(&sock, &attrib) != 0) ||
-			(recv_string(&sock, destination) != 0) ||
-			(recv_string(&sock, script_tmp) != 0) ||
-			(recv_string(&sock, cred_name) != 0) ||
-#if defined(PBS_PASS_CREDENTIALS)
-			(recv_string(&sock, passwd_buf) != 0) ||
-#endif
-			(recv_dyn_string(&sock, &v_value) != 0) ||
-			(recv_dyn_string(&sock, &basic_envlist) != 0) ||
-			(recv_dyn_string(&sock, &qsub_envlist) != 0) ||
-			(recv_string(&sock, qsub_cwd) !=0) ||
-			(recv_opts(&sock) != 0)) {
-			err_op = "recv data from foreground";
-			goto error;
-		}
-
-		/*
-		 * At this point the background qsub daemon has received all the data from the
-		 * foreground. Lets tell the foreground that we have received the data, so that
-		 * if the we crashed at any point after this the foreground should not end up
-		 * submitting a duplicate job. However, if the foreground did not get this intimation,
-		 * then it could go ahead and do a regular job submit.
-		 */
-		rc = 0;
-		if (dosend(&sock, (char *) &rc, sizeof(int)) != 0) {
-			err_op = "send data to foreground";
-			goto error;
-		}
-
-#if defined(PBS_PASS_CREDENTIALS)
-		if (passwd_buf[0] != '\0') {
-			pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
-		}
-#endif
-
-		/* set the current work directory by doing a chdir */
-		if (chdir(qsub_cwd) != 0) {
-			err_op = "chdir";
-			goto error;
-		}
-
-		if (setenv("PWD", qsub_cwd, 1) != 0) {
-			err_op = "setenv";
-			goto error;
-		}
-
-		sigemptyset(&newsigmask);
-		sigaddset(&newsigmask, SIGXCPU);
-		sigaddset(&newsigmask, SIGXFSZ);
-		sigaddset(&newsigmask, SIGTSTP);
-		sigaddset(&newsigmask, SIGINT);
-		sigaddset(&newsigmask, SIGSTOP);
-		sigaddset(&newsigmask, SIGTERM);
-		sigaddset(&newsigmask, SIGTSTP);
-		sigaddset(&newsigmask, SIGALRM);
-		sigaddset(&newsigmask, SIGQUIT);
-		sigaddset(&newsigmask, SIGUSR1);
-		sigaddset(&newsigmask, SIGUSR2);
-		sigprocmask(SIG_BLOCK, &newsigmask, &oldsigmask);
-
-		rc = do_submit2(retmsg);
-
-		if (send_string(&sock, retmsg) != 0) {
-			err_op = "send data to foreground";
-			goto error;
-		}
-		if (dosend(&sock, (char *) &rc, sizeof(int)) != 0) {
-			err_op = "send data to foreground";
-			goto error;
-		}
-
-		close(sock);
-		sigprocmask(SIG_SETMASK, &oldsigmask, NULL);
-
-		free_attrl(attrib);
-		attrib = NULL;
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
-
-		if (cred_buf != NULL) {
-			memset(cred_buf, 0, cred_len);
-			free(cred_buf);
-			cred_buf = NULL;
-		}
-#if defined(PBS_PASS_CREDENTIALS)
-		memset(passwd_buf, 0, PBS_MAXPWLEN);
-#endif
-	}
-
-out:
-	close(bindfd);
-	unlink(fl);
-	exit(0);
-
-error:
-	sprintf(log_buf, "Background qsub: Failed at %s, errno=%d", err_op, errno);
-	log_syslog(log_buf);
-	unlink(fl);
-	close(bindfd);
-	exit(1);
-}
-#endif
 
 /**
  * @brief
@@ -6006,107 +5138,6 @@ restore_opts()
 }
 
 /**
- *
- * @brief
- *	The wrapper program to "do_submit()".
- * @par
- *	This attempts up to 'retry' times to do_submit(), when this function
- *	returns PBSE_FORCE_QSUB_UPDATE.
- *
- * @param[in]	retmsg - gets filled with the error message.
- *
- * @return 	int
- * @retval	the return code of do_submit().
- * @retval	if retry time exhausted or any unexpected failure,
- * 		return PBSE_PROTOCOL
- *
- */
-
-static int
-do_submit2(char *rmsg)
-{
-	int	retry=5;	/* do a retry count to prevent infinite loop */
-	int	rc;
-
-
-	rmsg[0] = '\0';
-	/* save the original job attributes/resources (attrib)	*/
-	/* before 'default_qsub_arguments" was applied. 	*/
-	if (attrib != NULL) {
-		if (attrib_o != NULL)
-			free_attrl(attrib_o);
-		attrib_o = dup_attrl(attrib); /* save attributes list */
-		if (attrib_o == NULL) {
-			snprintf(rmsg, MAXPATHLEN-1,
-				"Failed to duplicate attributes list.\n");
-			return PBSE_PROTOCOL;
-		}
-	}
-
-	/* original v_value also needs to be saved as it gets mangled */
-	/* inside set_job_env() */
-	if (v_value != NULL) {
-		if (v_value_o != NULL)
-			free(v_value_o);
-		v_value_o = strdup(v_value);
-		if (v_value_o == NULL) {
-			snprintf(rmsg, MAXPATHLEN-1,
-				"Failed to duplicate original -v value\n");
-			return PBSE_PROTOCOL;
-		}
-	}
-
-	/* Need to save original values of qsub option variables, */
-	/* as "reset_dfltqsubargs() below could "lose" memory	  */
-	/* of the option variable values. The values are	  */
-	/* needed in case a new "default_qsub_arguments come and  */
-	/* gets reparsed.					  */
-	save_opts();
-
-	rc = do_submit(rmsg);
-	while ((rc == PBSE_FORCE_QSUB_UPDATE) && (retry > 0)) {
-		/* Let's retry with the new "default_qsub_arguments" 	*/
-		refresh_dfltqsubargs();
-
-		/* Use the original attrib value before the previous	*/
-		/* "default_qsub_arguments" was applied.		*/
-		if (attrib_o != NULL) {
-			if (attrib != NULL)
-				free_attrl(attrib);
-			attrib = dup_attrl(attrib_o);
-			if (attrib == NULL) {
-				snprintf(rmsg, MAXPATHLEN-1,
-					"Failed to duplicate attributes list\n");
-				return PBSE_PROTOCOL;
-			}
-		}
-
-		/* use original -v value */
-		if (v_value_o != NULL) {
-			if (v_value != NULL)
-				free(v_value);
-			v_value = strdup(v_value_o);
-			if (v_value == NULL) {
-				snprintf(rmsg, MAXPATHLEN-1,
-					"Failed to duplicate -v value\n");
-				return PBSE_PROTOCOL;
-			}
-		}
-
-		restore_opts();
-
-		rc = do_submit(rmsg);
-		retry--;
-	}
-	if (retry == 0) {
-		snprintf(rmsg, MAXPATHLEN-1,
-			"Retry to submit a job exhausted.\n");
-		rc = PBSE_PROTOCOL;
-	}
-	return (rc);
-}
-
-/**
  * @brief
  *	Helper function to free a list of attributes. This is called from
  *	do_daemon_stuff, since that function loops over for each client request.
@@ -6206,6 +5237,946 @@ get_conf_path()
 		}
 	}
 	return dup_cnf_path;
+}
+
+/**
+ *
+ * @brief
+ *	The wrapper program to "do_submit()".
+ * @par
+ *	This attempts up to 'retry' times to do_submit(), when this function
+ *	returns PBSE_FORCE_QSUB_UPDATE.
+ *
+ * @param[in]	retmsg - gets filled with the error message.
+ *
+ * @return 	int
+ * @retval	the return code of do_submit().
+ * @retval	if retry time exhausted or any unexpected failure,
+ * 		return PBSE_PROTOCOL
+ *
+ */
+static int
+do_submit2(char *rmsg)
+{
+	int	retry=5;	/* do a retry count to prevent infinite loop */
+	int	rc;
+
+
+	rmsg[0] = '\0';
+	/* save the original job attributes/resources (attrib)	*/
+	/* before 'default_qsub_arguments" was applied. 	*/
+	if (attrib != NULL) {
+		if (attrib_o != NULL)
+			free_attrl(attrib_o);
+		attrib_o = dup_attrl(attrib); /* save attributes list */
+		if (attrib_o == NULL) {
+			snprintf(rmsg, MAXPATHLEN-1,
+				"Failed to duplicate attributes list.\n");
+			return PBSE_PROTOCOL;
+		}
+	}
+
+	/* original v_value also needs to be saved as it gets mangled */
+	/* inside set_job_env() */
+	if (v_value != NULL) {
+		if (v_value_o != NULL)
+			free(v_value_o);
+		v_value_o = strdup(v_value);
+		if (v_value_o == NULL) {
+			snprintf(rmsg, MAXPATHLEN-1,
+				"Failed to duplicate original -v value\n");
+			return PBSE_PROTOCOL;
+		}
+	}
+
+	/* Need to save original values of qsub option variables, */
+	/* as "reset_dfltqsubargs() below could "lose" memory	  */
+	/* of the option variable values. The values are	  */
+	/* needed in case a new "default_qsub_arguments come and  */
+	/* gets reparsed.					  */
+	save_opts();
+
+	rc = do_submit(rmsg);
+	while ((rc == PBSE_FORCE_QSUB_UPDATE) && (retry > 0)) {
+		/* Let's retry with the new "default_qsub_arguments" 	*/
+		refresh_dfltqsubargs();
+
+		/* Use the original attrib value before the previous	*/
+		/* "default_qsub_arguments" was applied.		*/
+		if (attrib_o != NULL) {
+			if (attrib != NULL)
+				free_attrl(attrib);
+			attrib = dup_attrl(attrib_o);
+			if (attrib == NULL) {
+				snprintf(rmsg, MAXPATHLEN-1,
+					"Failed to duplicate attributes list\n");
+				return PBSE_PROTOCOL;
+			}
+		}
+
+		/* use original -v value */
+		if (v_value_o != NULL) {
+			if (v_value != NULL)
+				free(v_value);
+			v_value = strdup(v_value_o);
+			if (v_value == NULL) {
+				snprintf(rmsg, MAXPATHLEN-1,
+					"Failed to duplicate -v value\n");
+				return PBSE_PROTOCOL;
+			}
+		}
+
+		restore_opts();
+
+		rc = do_submit(rmsg);
+		retry--;
+	}
+	if (retry == 0) {
+		snprintf(rmsg, MAXPATHLEN-1,
+			"Retry to submit a job exhausted.\n");
+		rc = PBSE_PROTOCOL;
+	}
+	return (rc);
+}
+
+#ifdef WIN32
+/**
+ * @brief
+ *	Get the filename to be used for communications. This is created by
+ *	appending the target server name and the user login name to a filename.
+ *
+ * @param[out]	fl - The filename used for the communication pipe/socket for
+ *			the communication between background and forground
+ *			qsub processes.
+ *
+ * @return      void
+ *
+ */
+static void
+get_comm_filename(char *fl)
+{
+	char *env_svr = getenv(PBS_CONF_SERVER_NAME);
+	char *env_port = getenv(PBS_CONF_BATCH_SERVICE_PORT);
+
+	sprintf(fl, "\\\\.\\pipe\\pipe_%s_%s_%s_%s_%s_%s",
+		((server_out == NULL || server_out[0] == 0)?
+		"default" : server_out),
+		getlogin(),
+		cred_name,
+		get_conf_path(),
+		(env_svr == NULL)?"":env_svr,
+		(env_port == NULL)?"":env_port
+		);
+}
+
+/**
+ * @brief
+ *	The windows implementation of the qsub daemon.
+ *	This function creates a named pipe (CreateNamedPipe) and wait for a
+ *	client to connect to it (ConnectNamedPipe). It uses OVERLAPPED IO to
+ *	ensure that it does not block on ConnectNamedPipe. It continues and
+ *	signals the event that was passed to parameter 2 of this function. This
+ *	wakes up the waiting foreground process, which eventually calls
+ *	CreateFile to connect to the named pipe. The function does a
+ *	WaitForMultipleObjects to wait on two events: Either a connection close
+ *	with the pbs_server or a client pipe connect request incoming. If
+ *	neither happens within 60 seconds of waiting, this function times out
+ *	and results in the background qsub process to quit silently.
+ *
+ *
+ * @param[in]	fl - The filename used for the communication pipe/socket for
+ *			the communication between background and forground
+ *			qsub processes.
+ * @param[in] handle - Handle to synchronization event between foreground and
+ *			background qsub processes.
+ * @param[in] server - Target server name of NULL in case of default
+ *
+ */
+void
+do_daemon_stuff(char *file, char *handle, char *server)
+{
+	HANDLE hPipe;
+	int rc, pipeRc;
+	HANDLE hEvent, hEventParent;
+	HANDLE hSockEvent;
+	OVERLAPPED oOverlap;
+	int svr_sock = -1;
+	HANDLE handles[2];
+	time_t connect_time = 0;
+	time_t cred_connect_time = time(0); /* Record current time to compare against the credential timeout value of 30 mins */
+
+	sd_svr = -1; /* not connected */
+	hEventParent = atoi(handle);
+	if (hEventParent == -1)
+		goto error;
+
+	hEvent = CreateEvent(
+		NULL, /* default security attribute */
+		TRUE, /* manual-reset event */
+		FALSE, /* initial state = signaled */
+		NULL); /* unnamed event object */
+	if (hEvent == NULL)
+		goto error;
+
+	hSockEvent = WSACreateEvent();
+	if (hSockEvent == NULL)
+		goto error;
+
+	oOverlap.hEvent = hEvent;
+	hPipe = CreateNamedPipe(file,
+		PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+		PIPE_UNLIMITED_INSTANCES,
+		BUFSIZE, /* output buffer size */
+		BUFSIZE, /* input buffer size */
+		PIPE_TIMEOUT, /* client time-out */
+		NULL); /* no security attribute */
+	if (hPipe == INVALID_HANDLE_VALUE)
+		goto error;
+
+	/* set single threaded mode */
+	pbs_client_thread_set_single_threaded_mode();
+
+	while (1) {
+		if (!ConnectNamedPipe(hPipe, &oOverlap)) {
+			pipeRc = GetLastError();
+			if (pipeRc == ERROR_IO_PENDING) {
+				if (svr_sock == -1) { /* first time */
+					if (SetEvent(hEventParent) == 0)
+						goto error;
+					/* do wait for single object */
+					rc = WaitForSingleObject(hEvent,
+						QSUB_DMN_TIMEOUT_LONG * 1000);
+					if (rc != WAIT_OBJECT_0)
+						goto out; /* timeout */
+				} else {
+					/*
+					 * wait for both server connection
+					 * and client pipe
+					 */
+					if (!WSAResetEvent(hSockEvent))
+						goto error;
+					if (!ResetEvent(hEvent))
+						goto error;
+
+					if (WSAEventSelect(svr_sock, hSockEvent,
+						FD_CLOSE | FD_READ) != 0)
+						goto error;
+
+				       /*
+			 		* check if we are past the credential timeout
+			 		* Error out even if it is close to CREDENTIAL_LIFETIME, as
+			 		* request could take a while to reach server and get processed
+			 		* Qsub then does a regular submit (new connection)
+			 		*/
+					if ((time(0) - cred_connect_time) > (CREDENTIAL_LIFETIME - QSUB_DMN_TIMEOUT_LONG))
+                                		goto error;
+
+					handles[0] = hEvent;
+					handles[1] = hSockEvent;
+					rc = WaitForMultipleObjects(2, handles,
+						FALSE, QSUB_DMN_TIMEOUT_LONG * 1000);
+					if (rc == WAIT_FAILED)
+						goto error;
+					if (rc == WAIT_TIMEOUT)
+						goto out;
+					if (rc == WAIT_OBJECT_0 + 1) {
+						if (recv(svr_sock, &rc, 1,
+							MSG_OOB) < 1) {
+							goto out;
+						}
+					}
+				}
+			} else if (pipeRc != ERROR_PIPE_CONNECTED)
+				goto error;
+		}
+
+		if ((recv_attrl(hPipe, &attrib) != 0) ||
+			(recv_string(hPipe, destination) != 0) ||
+			(recv_string(hPipe, script_tmp) != 0) ||
+			(recv_string(hPipe, cred_name) != 0) ||
+#if defined(PBS_PASS_CREDENTIALS)
+			(recv_string(hPipe, passwd_buf) != 0) ||
+#endif
+			(recv_dyn_string(hPipe, &v_value) != 0) ||
+			(recv_dyn_string(hPipe, &basic_envlist) != 0) ||
+			(recv_dyn_string(hPipe, &qsub_envlist) != 0) ||
+			(recv_string(hPipe, qsub_cwd) !=0) ||
+			(recv_opts(hPipe) != 0))
+			goto error;
+
+#if defined(PBS_PASS_CREDENTIALS)
+		if (passwd_buf[0] != '\0')
+			pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_len, &cred_buf);
+#endif
+		/* set the current work directory by doing a chdir */
+		if (_chdir(qsub_cwd) != 0)
+			goto error;
+
+		if (setenv("PWD", qsub_cwd, 1) != 0)
+			goto error;
+
+		if (sd_svr == -1) {
+			rc = do_connect(server, retmsg);
+			connect_time = time(0);
+		}
+
+		if (sd_svr != -1) {
+			svr_sock = pbs_connection_getsocket(sd_svr);
+			rc = do_submit2(retmsg);
+		}
+
+		if (send_string(hPipe, retmsg) != 0)
+			goto error;
+
+		if (dosend(hPipe, &rc, sizeof(int)) != 0)
+			goto error;
+
+		FlushFileBuffers(hPipe);
+		DisconnectNamedPipe(hPipe);
+
+		if (sd_svr == -1)
+			goto out;
+
+		free_attrl(attrib);
+		attrib = NULL;
+
+		if (v_value != NULL) {
+			free(v_value);
+			v_value = NULL;
+		}
+		if (basic_envlist != NULL) {
+			free(basic_envlist);
+			basic_envlist = NULL;
+		}
+		if (qsub_envlist != NULL) {
+			free(qsub_envlist);
+			qsub_envlist = NULL;
+		}
+
+		if (cred_buf != NULL) {
+			memset(cred_buf, 0, cred_len);
+			free(cred_buf);
+			cred_buf = NULL;
+		}
+#if defined(PBS_PASS_CREDENTIALS)
+		memset(passwd_buf, 0, PBS_MAXPWLEN);
+#endif
+	}
+out:
+	DisconnectNamedPipe(hPipe);
+	CloseHandle(hPipe);
+	exit(0);
+
+error:
+#ifdef DEBUG
+	printLastError();
+#endif
+	ResetEvent(hEvent); /* reset event to wake up waiting client anyway */
+	DisconnectNamedPipe(hPipe);
+	CloseHandle(hPipe);
+	exit(1);
+}
+
+#else /* unix */
+/**
+ * @brief
+ *	Sets the filename to be used for the unix domain socket based comm.
+ *	This is formed by appending the UID and the target server name to the
+ *	filename.
+ *
+ * @param[out] fl - The filename in tmpdir that is used as the unix domain socket
+ *			file.
+ *
+ */
+static void
+get_comm_filename(char *fl)
+{
+	char *env_svr = getenv(PBS_CONF_SERVER_NAME);
+	char *env_port = getenv(PBS_CONF_BATCH_SERVICE_PORT);
+
+	sprintf(fl, "%s/pbs_%s_%lu_%s_%s_%s_%s",
+		tmpdir,
+		((server_out == NULL || server_out[0] == 0) ?
+		"default" : server_out),
+		(unsigned long int)getuid(),
+		cred_name,
+		get_conf_path(),
+		(env_svr == NULL)?"":env_svr,
+		(env_port == NULL)?"":env_port
+		);
+}
+
+/**
+ * @brief
+ *	Check whether a unix domain socket file is available.
+ *	That is an indication that a background qsub might already be running.
+ *
+ * @param[out]	fl - The filename used for the communication pipe/socket for
+ *			the communication between background and forground
+ *			qsub processes.
+ *
+ * @return      int
+ * @retval	0 - Not available
+ * @retval	1 - available
+ *
+ */
+int
+check_qsub_daemon(char *fl)
+{
+	get_comm_filename(fl);
+	if (access(fl, F_OK) == 0) {
+		/* check if file is usable */
+		return 1;
+	}
+	return 0;
+}
+
+/**
+ * @brief
+ *	The do_daemon_stuff Unix counterpart.
+ *	It creates a unix domain socket server and starts listening on it.
+ *	The umask is set to 077 so that the domain socket file is owned and
+ *	accessible by the user executing qsub only. Once a client (foreground
+ *	qsub) connects, it receives all the data from the foreground qsub and
+ *	executes do_submit, on the pre-established connection to pbs_server.
+ *	The connection to server was estiblished by the caller of this function
+ *	by calling do_connect().
+ *	This function also does a "select" wait on input of data from foreground
+ *	qsub processes, and a close notification on the socket with pbs_server.
+ *	The select breaks if foreground qsubs connect, the pbs_server dies, or
+ *	the timeout of 1 minutes expires. For the latter two cases, this function
+ *	does a silent exit of the background qsub daemon.
+ *
+ */
+static void
+do_daemon_stuff(void)
+{
+	int sock, bindfd;
+	int svr_sock;
+	struct sockaddr_un s_un;
+	struct sockaddr from;
+	socklen_t fromlen;
+	int rc;
+	fd_set readset;
+	fd_set workset;
+	struct timeval timeout;
+	int n, maxfd;
+	mode_t cmask = 0077;
+	time_t connect_time = time(0);
+	sigset_t newsigmask, oldsigmask;
+	char *err_op = "";
+	char log_buf[LOG_BUF_SIZE];
+	int cred_timeout = 0;
+
+	/* set umask so socket file created is only accessible by same user */
+	umask(cmask);
+	sigemptyset(&newsigmask);
+	sigaddset(&newsigmask, SIGPIPE);
+	sigprocmask(SIG_BLOCK, &newsigmask, NULL);
+
+	/* start up a unix domain socket to listen */
+	if ((bindfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+		err_op = "socket";
+		goto error;
+	}
+
+	s_un.sun_family = AF_UNIX;
+	(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
+	if (bind(bindfd, (const struct sockaddr *) &s_un, sizeof(s_un)) == -1)
+		exit(1); /* dont go to error */
+
+	FD_ZERO(&readset);
+	svr_sock = pbs_connection_getsocket(sd_svr);
+	if (listen(bindfd, 1) != 0) {
+		err_op = "listen";
+		goto error;
+	}
+
+	FD_SET(bindfd, &readset);
+	FD_SET(svr_sock, &readset);
+	maxfd = (bindfd > svr_sock) ? bindfd : svr_sock;
+	while (1) {
+
+		err_op = "";
+
+		memcpy(&workset, &readset, sizeof(readset));
+
+		timeout.tv_usec = 0;
+		/* since timeout gets reset on Linux */
+		if (cred_timeout == 1)
+			timeout.tv_sec = QSUB_DMN_TIMEOUT_SHORT; /* Short timeout to allow any foreground process to finsih before exiting */
+		else
+			timeout.tv_sec = QSUB_DMN_TIMEOUT_LONG;
+		n = select(maxfd + 1, &workset, NULL, NULL, &timeout);
+		if (n == 0)
+			goto out; /* daemon timed out waiting for connect from foreground */
+		else if (n == -1) {
+			err_op = "select failed";
+			goto error;
+		}
+
+		/*
+		 * check if we are past the credential timeout
+		 * Error out even if it is close to CREDENTIAL_LIFETIME, as
+		 * request could take a while to reach server and get processed
+		 * Qsub then does a regular submit (new connection)
+		 */
+		if (cred_timeout == 0 && ((time(0) - connect_time) > (CREDENTIAL_LIFETIME - QSUB_DMN_TIMEOUT_LONG))) {
+	                unlink(fl);
+			cred_timeout = 1;
+		}
+
+		if (FD_ISSET(svr_sock, &workset)) {
+			if (recv(svr_sock, &rc, 1, MSG_OOB) < 1)
+				goto out;
+		}
+
+		/* accept the connection */
+		fromlen = sizeof(from);
+		if ((sock = accept(bindfd, &from, &fromlen)) == -1) {
+			err_op = "accept";
+			goto error;
+		}
+
+		if ((recv_attrl(&sock, &attrib) != 0) ||
+			(recv_string(&sock, destination) != 0) ||
+			(recv_string(&sock, script_tmp) != 0) ||
+			(recv_string(&sock, cred_name) != 0) ||
+#if defined(PBS_PASS_CREDENTIALS)
+			(recv_string(&sock, passwd_buf) != 0) ||
+#endif
+			(recv_dyn_string(&sock, &v_value) != 0) ||
+			(recv_dyn_string(&sock, &basic_envlist) != 0) ||
+			(recv_dyn_string(&sock, &qsub_envlist) != 0) ||
+			(recv_string(&sock, qsub_cwd) !=0) ||
+			(recv_opts(&sock) != 0)) {
+			err_op = "recv data from foreground";
+			goto error;
+		}
+
+		/*
+		 * At this point the background qsub daemon has received all the data from the
+		 * foreground. Lets tell the foreground that we have received the data, so that
+		 * if the we crashed at any point after this the foreground should not end up
+		 * submitting a duplicate job. However, if the foreground did not get this intimation,
+		 * then it could go ahead and do a regular job submit.
+		 */
+		rc = 0;
+		if (dosend(&sock, (char *) &rc, sizeof(int)) != 0) {
+			err_op = "send data to foreground";
+			goto error;
+		}
+
+#if defined(PBS_PASS_CREDENTIALS)
+		if (passwd_buf[0] != '\0') {
+			pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
+		}
+#endif
+
+		/* set the current work directory by doing a chdir */
+		if (chdir(qsub_cwd) != 0) {
+			err_op = "chdir";
+			goto error;
+		}
+
+		if (setenv("PWD", qsub_cwd, 1) != 0) {
+			err_op = "setenv";
+			goto error;
+		}
+
+		sigemptyset(&newsigmask);
+		sigaddset(&newsigmask, SIGXCPU);
+		sigaddset(&newsigmask, SIGXFSZ);
+		sigaddset(&newsigmask, SIGTSTP);
+		sigaddset(&newsigmask, SIGINT);
+		sigaddset(&newsigmask, SIGSTOP);
+		sigaddset(&newsigmask, SIGTERM);
+		sigaddset(&newsigmask, SIGTSTP);
+		sigaddset(&newsigmask, SIGALRM);
+		sigaddset(&newsigmask, SIGQUIT);
+		sigaddset(&newsigmask, SIGUSR1);
+		sigaddset(&newsigmask, SIGUSR2);
+		sigprocmask(SIG_BLOCK, &newsigmask, &oldsigmask);
+
+		rc = do_submit2(retmsg);
+
+		if (send_string(&sock, retmsg) != 0) {
+			err_op = "send data to foreground";
+			goto error;
+		}
+		if (dosend(&sock, (char *) &rc, sizeof(int)) != 0) {
+			err_op = "send data to foreground";
+			goto error;
+		}
+
+		close(sock);
+		sigprocmask(SIG_SETMASK, &oldsigmask, NULL);
+
+		free_attrl(attrib);
+		attrib = NULL;
+		if (v_value != NULL) {
+			free(v_value);
+			v_value = NULL;
+		}
+		if (basic_envlist != NULL) {
+			free(basic_envlist);
+			basic_envlist = NULL;
+		}
+		if (qsub_envlist != NULL) {
+			free(qsub_envlist);
+			qsub_envlist = NULL;
+		}
+
+		if (cred_buf != NULL) {
+			memset(cred_buf, 0, cred_len);
+			free(cred_buf);
+			cred_buf = NULL;
+		}
+#if defined(PBS_PASS_CREDENTIALS)
+		memset(passwd_buf, 0, PBS_MAXPWLEN);
+#endif
+	}
+
+out:
+	close(bindfd);
+	unlink(fl);
+	exit(0);
+
+error:
+	sprintf(log_buf, "Background qsub: Failed at %s, errno=%d", err_op, errno);
+	log_syslog(log_buf);
+	unlink(fl);
+	close(bindfd);
+	exit(1);
+}
+#endif
+
+/**
+ * @brief
+ *	Fork the current process. Call the do_daemon_stuff function in the
+ *	child process which starts listening on the unix domain socket etc.
+ *	The parent process continues out of this function and eventually
+ *	returns back control to the calling shell.
+ *
+ * @return error code
+ * @retval 0 Success
+ * exits program on failure
+ *
+ */
+static int
+fork_and_stay(void)
+{
+	int pid;
+
+	pid = fork();
+	if (pid == 0) {
+
+		/*
+		 * Try to become the session leader.
+		 * If that fails, exit with a syslog message
+		 */
+		if (setsid() == -1) {
+			log_syslog("setsid failed");
+			exit(1);
+		}
+
+		/*
+		 * just close standard files, we don't want to
+		 * be session leader or close all other files
+		 */
+		(void) fclose(stdin);
+		(void) fclose(stdout);
+		(void) fclose(stderr);
+
+		/* clear off all the attributes */
+		free_attrl(attrib);
+		attrib = NULL;
+		if (v_value != NULL) {
+			free(v_value);
+			v_value = NULL;
+		}
+		if (basic_envlist != NULL) {
+			free(basic_envlist);
+			basic_envlist = NULL;
+		}
+		if (qsub_envlist != NULL) {
+			free(qsub_envlist);
+			qsub_envlist = NULL;
+		}
+
+		/* set single threaded mode */
+		pbs_client_thread_set_single_threaded_mode();
+
+		do_daemon_stuff();
+		/* control should never reach here */
+		/* still adding an exit, so it does not traverse parent code */
+		exit(1);
+	}
+	/* parent code */
+	return 0;
+}
+
+#ifdef WIN32
+/*
+ * @brief
+ *  Try to submit job through daemon. On Windows, the daemon would be created
+ *  by calling CreateProcess with the --daemon parameter during a prior
+ *  invocation of the qsub command. The foreground qsub process tries to send
+ *  the job to the daemon using a named pipe.
+ *
+ * @param[in]  qsub_exe          - Name of the qsub command to pass to CreateProcess
+ * @param[out] do_regular_submit - Indicate whether to do regular submit
+ * @return     rc                - Error code
+ */
+static int
+daemon_submit(const char *qsub_exe, int *do_regular_submit)
+{
+	int rc = 0;
+	/* determine pipe name */
+	get_comm_filename(fl);
+
+	/*
+	 * we have determined the name of the Named pipe that should be
+	 * used to communicate between the qsub background and foreground
+	 * process. Now try to connect to the background qsub process using this
+	 * named pipe.
+	 *
+	 * If the connection succeeds, it means a background qsub process
+	 * already exists. Send data to the background process and wait for
+	 * result.
+	 *
+	 * If connection fails, create a background qsub process by doing
+	 * a createprocess of the same qsub executable, but with --daemon
+	 * parameter. Now, there could be a race between the background and the
+	 * foreground qsub processes. If the background process is slower to
+	 * startup and listen on the named pipe, the foreground process could
+	 * fail again on trying to connect to it, thus entering a vicious loop.
+	 * To avoid that, create a manual reset event and pass its handle to
+	 * the new child process. The foreground process waits on the event
+	 * object, till the background process is up, sets up the named pipe,
+	 * and signals this event to tell the foreground process to continue
+	 * and  try to connect to it via this new named pipe.
+	 */
+	HANDLE hFile;
+	SECURITY_ATTRIBUTES sa;
+	STARTUPINFO si = {sizeof(si)};
+	PROCESS_INFORMATION pi;
+	char cmd_line[2*MAXPATHLEN + 1];
+	int created = 0;
+	HANDLE hEvent;
+
+again:
+	hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+			OPEN_EXISTING, 0, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) {
+		if (created == 0) {
+			sa.nLength = sizeof(sa);
+			sa.lpSecurityDescriptor = NULL;
+			sa.bInheritHandle = TRUE;
+
+			/* now create a named event to wait on later */
+			hEvent = CreateEvent(
+					&sa, /* default security attribute */
+					TRUE, /* manual-reset event */
+					FALSE, /* initial state = signaled */
+					NULL); /* unnamed event object */
+			if (hEvent == NULL)
+				return rc;
+
+			/* launch new qsub process, connect 2 server */
+			sa.bInheritHandle = FALSE;
+			sprintf(cmd_line, "%s --daemon %s %d %s",
+					qsub_exe, fl,
+					hEvent, server_out);
+			if (!CreateProcess(NULL, cmd_line, &sa, &sa,
+						TRUE, CREATE_NO_WINDOW, NULL,
+						NULL, &si, &pi)) {
+				CloseHandle(hEvent);
+				return rc;
+			}
+
+			/* now wait for single object */
+			/* foreground process wait a max 10 seconds */
+			rc = WaitForSingleObject(hEvent, 10 * 1000);
+			CloseHandle(hEvent);
+
+			if (rc != WAIT_OBJECT_0) /* timeout */
+				return rc;
+
+			created = 1;
+			goto again;
+		}
+	} else {
+		if ((send_attrl(hFile, attrib) == 0) &&
+				(send_string(hFile, destination) == 0) &&
+				(send_string(hFile, script_tmp) == 0) &&
+				(send_string(hFile, cred_name) == 0) &&
+#if defined(PBS_PASS_CREDENTIALS)
+				(send_string(hFile, passwd_buf) == 0) &&
+#endif
+				(send_string(hFile, v_value?v_value:"") == 0) &&
+				(send_string(hFile, basic_envlist) == 0) &&
+				(send_string(hFile, qsub_envlist?qsub_envlist:"") == 0) &&
+				(send_string(hFile, qsub_cwd) == 0) &&
+				(send_opts(hFile) == 0)) {
+			/*
+			 * we were able to send data to the background qsub.
+			 * Now, even if we fail to read back response from
+			 * background, we do not want to submit again.
+			 */
+			*do_regular_submit = 0;
+
+			/* read back response from background qsub */
+			if ((recv_string(hFile, retmsg) != 0) ||
+					(dorecv(hFile, &rc, sizeof(int)) != 0)) {
+
+				/* Something bad happened, either background submitted
+				 * and failed to send us response, or it failed before
+				 * submitting.
+				 */
+				rc = -1;
+				sprintf(retmsg, "Failed to recv data from background qsub\n");
+				/* fall through to print the error message */
+			}
+		}
+		FlushFileBuffers(hFile);
+		CloseHandle(hFile);
+	}
+	return rc;
+}
+#else
+/*
+ * @brief
+ *  Try to submit job through daemon. On Unix, the daemon would be created by
+ *  forking during a prior invocation of the qsub command. The foregound qsub
+ *  process tries to send the job to the daemon using Unix domain sockets.
+ *
+ * @param[out] daemon_up         - Indicate whether daemon is running
+ * @param[out] do_regular_submit - Indicate whether to do regular submit
+ * @return     rc                - Error code
+ */
+static int
+daemon_submit(int *daemon_up, int *do_regular_submit)
+{
+	int    sock; /* UNIX domain socket for talking to daemon */
+	struct sockaddr_un   s_un;
+	sigset_t newsigmask;
+	int rc = 0;
+again:
+	/*
+	 * In case of Unix, use fork. Foreground checks if connection is
+	 * possible with background daemon. The communication used is unix
+	 * domain sockets. Only the specified user can connect to this socket
+	 * since the domain socket is created with a 0600 permission.
+	 *
+	 * If connection fails, proceed with qsub in the normal flow, and at
+	 * the end fork and stay in the background, while the foreground
+	 * process returns control to the shell. Subsequent qsubs will be able
+	 * to connect to this forked background qsub.
+	 *
+	 */
+	*daemon_up = check_qsub_daemon(fl);
+	if (*daemon_up == 1) {
+		/* pass information to daemon */
+		/* wait for job-id or error string */
+		if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+			return rc;
+
+		s_un.sun_family = AF_UNIX;
+		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
+		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
+			int	refused = (errno == ECONNREFUSED);
+
+			close(sock);
+			if (refused) {
+				/* daemon unavailable, del temp file, restart */
+				if (unlink(fl) != 0)
+					return rc;
+
+				goto again;
+			}
+			return rc;
+		}
+
+		/* block SIGPIPE on write() failures. */
+		sigemptyset(&newsigmask);
+		sigaddset(&newsigmask, SIGPIPE);
+		sigprocmask(SIG_BLOCK, &newsigmask, NULL);
+
+		if ((send_attrl(&sock, attrib) == 0) &&
+			(send_string(&sock, destination) == 0) &&
+			(send_string(&sock, script_tmp) == 0) &&
+			(send_string(&sock, cred_name) == 0) &&
+#if defined(PBS_PASS_CREDENTIALS)
+			(send_string(&sock, passwd_buf) == 0) &&
+#endif
+			(send_string(&sock, v_value?v_value:"") == 0) &&
+			(send_string(&sock, basic_envlist) == 0) &&
+			(send_string(&sock, qsub_envlist?qsub_envlist:"") == 0) &&
+			(send_string(&sock, qsub_cwd) == 0) &&
+			(send_opts(&sock) == 0)) {
+
+			/* read back the first error code from the background
+			 * which confirms whether the background received our data
+			 */
+			if (dorecv(&sock, (char *) &rc, sizeof(int)) == 0) {
+				/*
+				 * we were able to send data to the background daemon.
+				 * Now, even if we fail to read back response from
+				 * background, we do not want to submit again.
+				 */
+				*do_regular_submit = 0;
+			}
+
+			/* read back response from background daemon */
+			if ((recv_string(&sock, retmsg) != 0) ||
+				dorecv(&sock, (char *) &rc, sizeof(int)) != 0) {
+
+				/* Something bad happened, either background submitted
+				 * and failed to send us response, or it failed before
+				 * submitting.
+				 */
+				rc = -1;
+				sprintf(retmsg, "Failed to recv data from background qsub\n");
+				/* fall through to print the error message */
+			}
+		}
+		/* going down, no need to free stuff */
+		close(sock);
+	}
+	return rc;
+}
+#endif
+
+/*
+ * @brief
+ *  Perform a regular submit, without the daemon.
+ *
+ * @param[in] daemon_up - Indicates whether daemon is running
+ * @return    rc        - Error code
+ */
+static int
+regular_submit(const int daemon_up)
+{
+	int rc = 0;
+	rc = do_connect(server_out, retmsg);
+	if (rc == 0) {
+		if (sd_svr != -1) {
+#if defined(PBS_PASS_CREDENTIALS)
+			if (passwd_buf[0] != '\0')
+				pbs_encrypt_pwd(passwd_buf, &cred_type, &cred_buf, &cred_len);
+#endif
+			rc = do_submit2(retmsg);
+		}
+		else
+			rc = -1;
+	}
+#ifndef WIN32
+	if ((rc == 0) && !(Interact_opt != FALSE || block_opt) && (daemon_up == 0) && (no_background == 0))
+		fork_and_stay();
+#endif
+	return rc;
 }
 
 /*
