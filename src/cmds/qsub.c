@@ -171,8 +171,9 @@ static char PBS_DPREFIX_DEFAULT[] = "#PBS";
 extern void set_attr_resc(struct attrl **attrib, char *attrib_name, char *attrib_resc, char *attrib_value);
 #endif /* localmod 005 */
 extern char *msg_force_qsub_update;
-int comm_sock;
 
+/* Socket of interactive and block job */
+int comm_sock;
 /* Socket for x11 communication */
 int X11_comm_sock;
 
@@ -188,11 +189,11 @@ static char xauth_err_redirection[] = "2>&1";
 /* offset of the redirection clause */
 #define X11_MSG_OFFSET sizeof(xauth_err_redirection)
 
-#ifndef WIN32
+#ifdef WIN32 /* Windows */
+static CRITICAL_SECTION continuethread_cs;
+#else /* Unix */
 struct termios oldtio;
 struct winsize wsz;
-#else
-static CRITICAL_SECTION continuethread_cs;
 #endif
 
 /* global var to hold the message that background qsub process will send */
@@ -246,6 +247,7 @@ char   fl[2*MAXPATHLEN+1];	/* the filename used as the pipe name */
 char *pbs_hostvar = NULL;
 int pbs_o_hostsize = sizeof(",PBS_O_HOST=") + 1;
 char *display;
+
 /* state booleans for protecting already-set options */
 int a_opt = FALSE;
 int c_opt = FALSE;
