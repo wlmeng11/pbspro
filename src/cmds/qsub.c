@@ -346,7 +346,7 @@ static int P_opt_o = FALSE;
  * @return Void
  *
  */
-void
+static void
 log_cmds_portfw_msg(char *msg)
 {
 	fprintf(stderr, "%s\n", msg);
@@ -364,8 +364,8 @@ log_cmds_portfw_msg(char *msg)
  * @param[in]	msg - string to be logged
  *
  */
-void
-log_syslog(char *msg)
+static void
+log_syslog(char const * const msg)
 {
 	openlog("qsub", LOG_PID | LOG_CONS | LOG_NOWAIT, LOG_USER);
 	syslog(LOG_ERR, "%s", msg);
@@ -382,7 +382,7 @@ log_syslog(char *msg)
  * @retval	NULL	no more tokens
  *
  */
-char *
+static char *
 comma_token(char *str)
 {
 	static	char	*p = NULL;
@@ -436,7 +436,7 @@ comma_token(char *str)
  * @retval	NULL - Failure
  * @retval      !NULL - Success - Pointer to pv parameter
  */
-char *
+static char *
 copy_env_value(char *dest, /* destination  */
 	char *pv, /* value string */
 	int quote_flg) /* non-zero then assume single word (quoting on) */
@@ -535,7 +535,7 @@ copy_env_value(char *dest, /* destination  */
  *	NULL if any error encountered.
  *
  */
-char *
+static char *
 expand_varlist(char *varlist)
 {
 	char	*v_value1 = NULL;
@@ -577,7 +577,7 @@ expand_varlist(char *varlist)
 		goto expand_varlist_err;
 	}
 
-	p1=comma_token(v_value2);
+	p1 = comma_token(v_value2);
 	while (p1 != NULL) {
 		vn = p1;
 		vv = NULL;
@@ -585,8 +585,7 @@ expand_varlist(char *varlist)
 			*p2 = '\0';
 			vv = p2+1;
 		}
-		if ((vv == NULL) && (strncmp(vn, pbs_o_env,
-			sizeof(pbs_o_env)-1) !=  0)) {
+		if ((vv == NULL) && (strncmp(vn, pbs_o_env, sizeof(pbs_o_env)-1) !=  0)) {
 			/* do not add PBS_O_* env variables, as these */
 			/* are set by qsub */
 
@@ -933,7 +932,7 @@ print_usage()
  * exits from program on failure
  *
  */
-char *
+static char *
 interactive_port()
 {
 	pbs_socklen_t namelen;
@@ -989,7 +988,7 @@ interactive_port()
  *		If this function fails, it will exit the qsub process.
  *
  */
-char*
+static char*
 port_X11(void)
 {
 	pbs_socklen_t namelen;
@@ -1037,9 +1036,9 @@ port_X11(void)
  * @retval Void
  *
  */
-void
+static void
 settermraw(ptio)
-struct termios *ptio;
+	struct termios *ptio;
 {
 	struct termios tio;
 
@@ -1075,7 +1074,7 @@ struct termios *ptio;
  * @retval Void
  *
  */
-void
+static void
 stopme(pid_t p)
 {
 	(void)tcsetattr(0, TCSANOW, &oldtio); /* reset terminal */
@@ -1095,7 +1094,7 @@ stopme(pid_t p)
  * @retval   0   Success
  *
  */
-int
+static int
 reader(int s)
 {
 	char buf[4096];
@@ -1145,7 +1144,7 @@ reader(int s)
  * @retval      -2      Peer Closed connection
  *
  */
-int
+static int
 reader_Xjob(int s)
 {
 	static char buf[PF_BUF_SIZE];
@@ -1198,7 +1197,7 @@ reader_Xjob(int s)
  * @return Void
  *
  */
-void
+static void
 writer(int s)
 {
 	char c;
@@ -1288,7 +1287,7 @@ writer(int s)
  * @retval   0    Success
  *
  */
-int
+static int
 getwinsize(struct winsize *pwsz)
 {
 	if (ioctl(0, TIOCGWINSZ, &wsz) < 0) {
@@ -1307,7 +1306,7 @@ getwinsize(struct winsize *pwsz)
  * @return Void
  *
  */
-void
+static void
 send_winsize(int sock)
 {
 	char  buf[PBS_TERM_BUF_SZ];
@@ -1327,7 +1326,7 @@ send_winsize(int sock)
  * @return Void
  *
  */
-void
+static void
 send_term(int sock)
 {
 	char  buf[PBS_TERM_BUF_SZ];
@@ -1364,7 +1363,7 @@ send_term(int sock)
  * @return Void
  *
  */
-void
+static void
 catchchild(int sig)
 {
 	int status;
@@ -1397,7 +1396,7 @@ catchchild(int sig)
  * @return Void
  *
  */
-void
+static void
 no_suspend(int sig)
 {
 	printf("Sorry, you cannot suspend qsub until the job is started\n");
@@ -1415,7 +1414,7 @@ no_suspend(int sig)
  * @return Void
  *
  */
-void
+static void
 close_sock(int sock)
 {
 	shutdown(sock, 2);
@@ -1435,7 +1434,7 @@ close_sock(int sock)
  * @return      void
  *
  */
-void
+static void
 bailout(int ret)
 {
 	int	c;
@@ -1464,7 +1463,7 @@ bailout(int ret)
  * @return Void
  *
  */
-void
+static void
 toolong(int sig)
 {
 	printf("Timeout -- deleting job\n");
@@ -1480,7 +1479,7 @@ toolong(int sig)
  * @return Void
  *
  */
-void
+static void
 catchint(int sig)
 {
 	int c;
@@ -1522,7 +1521,7 @@ catchint(int sig)
  * 	On failure, the function will cause the qsub process to exit.
  *
  */
-void
+static void
 x11handler(int X_data_socket, int interactive_reader_socket)
 {
 	int n;
@@ -1591,7 +1590,7 @@ enable_gui(void)
  *	On failure, the function will cause the qsub process to exit.
  *
  */
-void
+static void
 interactive(void)
 {
 	int  amt;
@@ -1810,7 +1809,7 @@ retry:
  *	On failure, the function will cause the qsub process to exit.
  *
  */
-void
+static void
 interactive(void)
 {
 	int			amt = 0;
@@ -2026,7 +2025,7 @@ interactive(void)
  * @retval portstring string holding port info
  *
  */
-char *
+static char *
 block_port()
 {
 	pbs_socklen_t  namelen;
@@ -2070,7 +2069,7 @@ block_port()
 	return (portstring);
 }
 
-int	sig_happened = 0;
+static int	sig_happened = 0;
 
 #ifdef WIN32
 /**
@@ -2082,7 +2081,7 @@ int	sig_happened = 0;
  * @return Void
  *
  */
-void
+static void
 win_blockint(int sig)
 {
 	/*
@@ -2120,7 +2119,7 @@ win_blockint(int sig)
  * @return Void
  *
  */
-void
+static void
 blockint(int sig)
 {
 	sig_happened = sig;
@@ -2133,7 +2132,7 @@ blockint(int sig)
  * @return	void
  *
  */
-void
+static void
 exit_on_sigpipe(int sig)
 {
 	perror("qsub: SIGPIPE received, job submission interrupted.");
@@ -2182,7 +2181,7 @@ set_sig_handlers(void)
  * Exits on failre
  *
  */
-void
+static void
 block()
 {
 	struct sockaddr_in	from;
@@ -2315,7 +2314,7 @@ err:
 #define flags2options(flags) (flags & KDC_TKT_COMMON_MASK)
 #define		TKTLIFE		32659200	/* about a year */
 
-time_t	now;
+static time_t	now;
 
 /**
  * @brief
@@ -2331,7 +2330,7 @@ time_t	now;
  * @retval krb5_error_code 	Failure
  *
  */
-krb5_error_code
+static krb5_error_code
 get_cred_from_cache(krb5_context context, krb5_ccache    cc, krb5_creds *creds,
 			krb5_address **addrs, krb5_creds **pcreds)
 {
@@ -2400,7 +2399,7 @@ done:
  * @retval krb5_error_code 	Failure
  *
  */
-krb5_error_code
+static krb5_error_code
 fwd_tgt_creds(krb5_context context, krb5_auth_context auth_context, krb5_principal client,
 		krb5_principal server, krb5_ccache cc,  krb5_data *outbuf)
 {
@@ -2522,7 +2521,7 @@ errout:
  * @retval   0  Success
  *
  */
-int
+static int
 get_krb5_ticket(char *remote)
 {
 	int			ret = -1;
@@ -2626,7 +2625,7 @@ done:
  * @retval   0  Success
  *
  */
-int
+static int
 get_grid_proxy()
 {
 	int			ret = -1;
@@ -2771,7 +2770,7 @@ done:
  *a@retval -1 Failure
  *
  */
-int
+static int
 get_passwd()
 {
 	int	ret = -1;
@@ -2823,7 +2822,7 @@ get_passwd()
  * @return int - It returns number of erroneous options processed.
  *
  */
-int
+static int
 process_opts(int argc, char **argv, int passet)
 {
 	int i;
@@ -3465,7 +3464,7 @@ process_special_args(int const argc, char ** const argv, char * const script)
  * @param[in] line - charcter pointer for whole line
  *
  */
-void
+static void
 make_argv(int *argc, char *argv[], char *line)
 {
 	char *l, *b, *c;
@@ -3544,7 +3543,7 @@ make_argv(int *argc, char *argv[], char *line)
  * @retval	 0 - Success
  *
  */
-int
+static int
 do_dir(char *opts, int opt_pass, char *retmsg, int ret_size)
 {
 	int argc;
@@ -3587,7 +3586,7 @@ do_dir(char *opts, int opt_pass, char *retmsg, int ret_size)
  *	their default value
  *
  */
-void
+static void
 set_opt_defaults()
 {
 	if (c_opt == FALSE)
@@ -3630,7 +3629,7 @@ set_opt_defaults()
  * @retval      5 - Error reading input file
  * @retval      6 - Unexpected EOF on read
  */
-int
+static int
 get_script(FILE *file, char *script, char *prefix)
 {
 	char s[MAX_LINE_LEN+1];
@@ -3756,7 +3755,7 @@ get_script(FILE *file, char *script, char *prefix)
  * @retval Failure - NULL
  *
  */
-char *
+static char *
 set_dir_prefix(char *prefix, int diropt)
 {
 	char *s;
@@ -3867,7 +3866,7 @@ read_job_script(char * const script)
  * @retval	A comma-separated list of environment variable=value entries.
  *
  */
-char *
+static char *
 job_env_basic(void)
 {
 	char *job_env = NULL;
@@ -4077,7 +4076,7 @@ job_env_basic(void)
  * @retval      A comma-separated list of environment variables and values.
  *		The returned string is malloc-ed so it must be freed later.
  */
-char *
+static char *
 env_array_to_varlist(char **envp)
 {
 	char	**evp;
@@ -4146,7 +4145,7 @@ env_array_to_varlist(char **envp)
  * @retval	FALSE for failure.
  *
  */
-int
+static int
 set_job_env(char *basic_vlist, char *current_vlist)
 {
 	char *job_env;
@@ -5386,7 +5385,7 @@ get_comm_filename(char *fl)
  * @param[in] server - Target server name of NULL in case of default
  *
  */
-void
+static void
 do_daemon_stuff(char *file, char *handle, char *server)
 {
 	HANDLE hPipe;
@@ -5615,7 +5614,7 @@ get_comm_filename(char *fl)
  * @retval	1 - available
  *
  */
-int
+static int
 check_qsub_daemon(char *fl)
 {
 	get_comm_filename(fl);
