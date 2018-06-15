@@ -736,10 +736,12 @@ x11_get_authstring(void)
 	if (p != NULL)
 		p = strchr(p, '.');
 
-	if (p != NULL)
+	if (p != NULL) {
 		strncpy(screen, p + 1, sizeof(screen));
+		screen[sizeof(screen)-1] = 0;
+	}
 	else
-		strcpy(screen, "0");
+		strcpy(screen, "0"); /* safe as long as XAUTH_LEN >= 2 */
 
 #ifdef DEBUG
 	fprintf(stderr, "x11_get_authstring: %s\n", line);
@@ -1328,13 +1330,14 @@ send_term(int sock)
 	char *term;
 	char  cc_array[PBS_TERM_CCA];
 
-	(void)strcpy(buf, "TERM=");
+	(void)strcpy(buf, "TERM="); /* safe as long as PBS_TERM_BUF_SZ >= 6 */
 	term = getenv("TERM");
 	term = strdup_esc_commas(term);
 	if (term == NULL)
-		(void)strcat(buf, "unknown");
+		(void)strcat(buf, "unknown"); /* safe as long as PBS_TERM_BUF_SZ >= 13 */
 	else {
 		(void)strncat(buf, term, PBS_TERM_BUF_SZ-5);
+		buf[sizeof(buf)-1] = 0;
 		free(term);
 	}
 	(void)CS_write(sock, buf, PBS_TERM_BUF_SZ);
@@ -1876,7 +1879,7 @@ interactive(void)
 		exit_qsub(1);
 	}
 	LeaveCriticalSection(&continuethread_cs);
-	strncpy(remote_ip, inet_ntoa(from.sin_addr), INET_ADDR_STRLEN);
+	strncpy(remote_ip, inet_ntoa(from.sin_addr), INET_ADDR_STRLEN); /* safe because remote_ip was initialized with zeroes */
 	if (remote_ip == NULL) {
 		perror("qsub: Failed to get IP address of execution host ");
 		closesocket(comm_sock);
@@ -2575,7 +2578,8 @@ get_krb5_ticket(char *remote)
 	}
 
 	snprintf(server_name, sizeof(server_name), "host/%s@", remote);
-	strncat(server_name, client->realm.data, client->realm.length);
+	strncat(server_name, client->realm.data, sizeof(server_name)-strlen(server_name));
+	server_name[sizeof(server_name)-1] = 0;
 	krb5_parse_name(ktext, server_name, &server);
 	server->type = KRB5_NT_SRV_HST;
 
@@ -2927,7 +2931,8 @@ process_opts(int argc, char **argv, int passet)
 			case 'C':
 				if_cmd_line(C_opt) {
 					C_opt = passet;
-					strcpy(dir_prefix, optarg);
+					strncpy(dir_prefix, optarg, sizeof(dir_prefix));
+					dir_prefix[sizeof(dir_prefix)-1] = 0;
 				}
 				break;
 			case 'e':
@@ -3066,6 +3071,7 @@ process_opts(int argc, char **argv, int passet)
 				if_cmd_line(q_opt) {
 					q_opt = passet;
 					strcpy(destination, optarg);
+					destination[sizeof(destination)-1] = 0;
 				}
 				break;
 			case 'r':
@@ -3295,7 +3301,8 @@ process_opts(int argc, char **argv, int passet)
 					} else if (strcmp(keyword, ATTR_cred) == 0) {
 						if_cmd_line(cred_opt) {
 							cred_opt = passet;
-							strcpy(cred_name, valuewd);
+							strncpy(cred_name, valuewd, sizeof(cred_name));
+							cred_name[sizeof(cred_name)-1] = 0;
 							set_attr(&attrib, ATTR_cred, valuewd);
 						}
 					} else {
@@ -3443,7 +3450,7 @@ process_special_args(int const argc, char ** const argv, char * const script)
 			if (!N_opt)	/* '-N' is not set */
 				set_attr(&attrib, ATTR_N, "STDIN");
 		} else {
-			strncpy(script, argv[optind], MAXPATHLEN);
+			strncpy(script, argv[optind], MAXPATHLEN); /* sizeof(script) is MAXPATHLEN+1 */
 			script[MAXPATHLEN] = '\0';
 		}
 	}
@@ -3456,7 +3463,7 @@ process_special_args(int const argc, char ** const argv, char * const script)
  *
  * @param[in] argc - argument count
  * @param[in] argv - pointer to array of argument variables
- * @param[in] line - charcter pointer for whole line
+ * @param[in] line - character pointer for whole line
  *
  */
 static void
@@ -3649,7 +3656,8 @@ get_script(FILE *file, char *script, char *prefix)
 
 	_snprintf(tmp_name, MAXPATHLEN, "%s\\%s", tmpdir, tmp_template);
 	if ((in = _mktemp(tmp_name)) != NULL) {
-		strcpy(script, tmp_name);
+		strncpy(script, tmp_name, sizeof(script));
+		script[sizeof(script)-1] = 0;
 		if ((TMP_FILE = fopen(in, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -3661,7 +3669,8 @@ get_script(FILE *file, char *script, char *prefix)
 	snprintf(tmp_name, MAXPATHLEN, "%s/%s", tmpdir, tmp_template);
 	fds = mkstemp(tmp_name);	/* returns file descriptor */
 	if (fds != -1) {
-		strcpy(script, tmp_name);
+		strncpy(script, tmp_name, sizeof(script));
+		script[sizeof(script)-1] = 0;
 		if ((TMP_FILE = fdopen(fds, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -4007,7 +4016,8 @@ job_env_basic(void)
 		char *c_escaped = NULL;
 
 		/* save current working dir for daemon */
-		strncpy(qsub_cwd, c, strlen(c));
+		strncpy(qsub_cwd, c, sizeof(qsub_cwd));
+		qsub_cwd[sizeof(qsub_cwd)] = 0;
 #ifdef WIN32
 		/* get UNC path (if available) if it is mapped drive */
 		get_uncpath(c);
@@ -4017,7 +4027,7 @@ job_env_basic(void)
 #ifdef WIN32
 			back2forward_slash(c_escaped);
 #endif
-			strncpy(p, c_escaped, strlen(c_escaped));
+			strncpy(p, c_escaped, strlen(c_escaped)); /* TODO: is this safe? */
 			free(c_escaped);
 			c_escaped = NULL;
 		} else
@@ -4990,7 +5000,7 @@ do_submit(char *retmsg)
 			if (get_grid_proxy())
 				return 1;
 		} else {
-			strcpy(retmsg, "qsub: unknown credential type\n");
+			strncpy(retmsg, "qsub: unknown credential type\n", MAXPATHLEN);
 			return 1;
 		}
 	}
@@ -5671,6 +5681,8 @@ do_daemon_stuff(void)
 
 	s_un.sun_family = AF_UNIX;
 	(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
+	s_un.sun_path[sizeof(s_un.sun_path)-1] = 0;
+
 	if (bind(bindfd, (const struct sockaddr *) &s_un, sizeof(s_un)) == -1)
 		exit(1); /* dont go to error */
 
@@ -6073,6 +6085,8 @@ again:
 
 		s_un.sun_family = AF_UNIX;
 		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
+		s_un.sun_path[sizeof(s_un.sun_path)-1] = 0;
+
 		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
 			int	refused = (errno == ECONNREFUSED);
 
@@ -6231,7 +6245,12 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		exit(0);
 	}
 
-	strcpy(qsub_exe, argv[0]); /* note the name of the qsub executable */
+	strncpy(qsub_exe, argv[0], sizeof(qsub_exe)); /* note the name of the qsub executable */
+	qsub_exe[sizeof(qsub_exe)-1] = 0;
+	if (strlen(qusb_exe) != strlen(argv[0])) {
+		fprintf(stderr, "qsub: Name of executable is too long\n");
+		exit_qsub(2);
+	}
 #endif
 
 
@@ -6276,7 +6295,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		(void)unlink(script_tmp);
 		exit_qsub(2);
 	} else if (notNULL(s_n_out)) {
-			strcpy(server_out, s_n_out);
+			strncpy(server_out, s_n_out, sizeof(server_out));
+			server_out[sizeof(server_out)-1] = 0;
 	}
 
 	/* Get required environment variables to be sent to the server. */
