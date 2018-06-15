@@ -164,179 +164,174 @@
 #define QSUB_DMN_TIMEOUT_LONG 60  /* timeout for qsub background process */
 #define QSUB_DMN_TIMEOUT_SHORT 5
 
-static char PBS_DPREFIX_DEFAULT[] = "#PBS";
 
-/* globals */
+/* extern global variables */
 #ifdef NAS /* localmod 005 */
 extern void set_attr_resc(struct attrl **attrib, char *attrib_name, char *attrib_resc, char *attrib_value);
 #endif /* localmod 005 */
 extern char *msg_force_qsub_update;
 
-/* Socket of interactive and block job */
-int comm_sock;
-/* Socket for x11 communication */
-int X11_comm_sock;
+/*
+ * The following variables are file static (ie. global in this file).
+ */
+static char PBS_DPREFIX_DEFAULT[] = "#PBS";
+static char	const pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
 
-/* Max size of buffer to store Xauth cookie length */
-#define XAUTH_LEN   512
+/* Warning/Error messages */
+#ifdef WIN32
+static char const intergui_warn[] = "qsub: only interactive jobs can have GUI\n";
+#endif
+static char const interblock_warn[] = "qsub (Warning) : setting \"block\" attribute as \"true\""
+	" for an interactive job will not return job's exit status\n";
+static char const interarray[] = "qsub: interactive and array job submission cannot be used together\n";
+static char const norerunarray[] = "qsub:  cannot submit non-rerunable Array Job\n";
+static char const reruninteract[] = "qsub (Warning): Interactive jobs will be treated as not rerunnable\n";
+static char const badw[] = "qsub: illegal -W value\n";
 
-/* Max size of buffer to store port information as string */
-#define X11_PORT_LEN 8
+/* Security library variables */
+static int	cs_init = 0;	/*1==security library initialized, 0==not initialized*/
+static int 	cred_type = -1;
+static size_t	cred_len = 0;
+static char	*cred_buf = NULL;
+static char cred_name[32];	/* space to hold small credential name */
+#if defined(PBS_PASS_CREDENTIALS)
+static char	passwd_buf[PBS_MAXPWLEN] = {'\0'};
+#endif
 
-/* redirection string used for xauth command */
-static char xauth_err_redirection[] = "2>&1";
+static char	*tmpdir = NULL; /* Path of temp directory in which to put the job script */
 
-/* offset of the redirection clause */
-#define X11_MSG_OFFSET sizeof(xauth_err_redirection)
+/* variables for Interactive mode */
+static int comm_sock; /* Socket for interactive and block job */
+static int X11_comm_sock; /* Socket for x11 communication */
+
+#define XAUTH_LEN   512 /* Max size of buffer to store Xauth cookie length */
+#define X11_PORT_LEN 8  /* Max size of buffer to store port information as string */
+static char xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
+#define X11_MSG_OFFSET sizeof(xauth_err_redirection) /* offset of the redirection clause */
 
 #ifdef WIN32 /* Windows */
 static CRITICAL_SECTION continuethread_cs;
 #else /* Unix */
-struct termios oldtio;
-struct winsize wsz;
+static struct termios oldtio; /* Terminal info */
+static struct winsize wsz; /* Window size */
 #endif
 
-/* global var to hold the message that background qsub process will send */
-char retmsg[MAXPATHLEN];
+
+static char retmsg[MAXPATHLEN]; /* global var to hold the message that background qsub process will send */
+static char qsub_cwd[MAXPATHLEN + 1]; /* global var to pass cwd to background qsub */
 
 
-/* global var to pass cwd to background qsub */
-char qsub_cwd[MAXPATHLEN + 1];
-
-
-struct attrl *attrib = NULL;
-struct attrl *attrib_o = NULL;
-char *new_jobname = NULL;                  /* return from submit request */
-char dir_prefix[MAX_QSUB_PREFIX_LEN+1];
-char destination[PBS_MAXDEST];
-static char server_out[PBS_MAXSERVERNAME+PBS_MAXPORTNUM+2];
-struct batch_status *ss = NULL;
-char *dfltqsubargs = NULL;
-int sd_svr;                        /* return from pbs_connect */
-char script_tmp[MAXPATHLEN+1] = "";      /* name of script file copy */
-char   fl[2*MAXPATHLEN+1];	/* the filename used as the pipe name */
+static struct attrl *attrib = NULL; /* Attribute list */
+static struct attrl *attrib_o = NULL; /* Original attribute list, before applying default_qsub_arguments */
+static char *new_jobname = NULL;                  /* return from submit request */
+static char dir_prefix[MAX_QSUB_PREFIX_LEN+1]; /* Directive Prefix, specified by C opt */
+static char destination[PBS_MAXDEST]; /* Destination of the batch job, specified by q opt */
+static char server_out[PBS_MAXSERVERNAME+PBS_MAXPORTNUM+2]; /* Destination server, parsed from destination[] */
+static struct batch_status *ss = NULL;
+static char *dfltqsubargs = NULL; /* Default qsub arguments */
+static int sd_svr;                        /* return from pbs_connect */
+static char script_tmp[MAXPATHLEN+1] = "";      /* name of script file copy */
+static char   fl[2*MAXPATHLEN+1];	/* the filename used as the pipe name */
 #define BUFSIZE 1024		/* windows default pipe buffer size */
 #define PIPE_TIMEOUT 0		/* default windows pipe timeout */
-char *pbs_hostvar = NULL;
-int pbs_o_hostsize = sizeof(",PBS_O_HOST=") + 1;
-char *display;
+static char *pbs_hostvar = NULL; /* buffer containing ",PBS_O_HOST=" and host name */
+static int pbs_o_hostsize = sizeof(",PBS_O_HOST=") + 1; /* size of prefix for hostvar */
+static char *display; /* environment variable DISPLAY */
+
+static int no_background = 0; /* flag to disable backgrounding */
+static char  roptarg = 'y'; /* whether the job is rerunnable */
+static char *v_value = NULL; /* expanded variable list from v opt */
+static char *v_value_o = NULL; /* copy of v_value before set_job_env() */
+static char *basic_envlist = NULL; /* basic comma-separated environment variables list string */
+static char *qsub_envlist = NULL; /* comma-separated variables list string */
+#ifndef WIN32
+static int x11_disp = FALSE; /* whether DISPLAY environment variable is available */
+#endif
 
 /* state booleans for protecting already-set options */
-int a_opt = FALSE;
-int c_opt = FALSE;
-int e_opt = FALSE;
-int h_opt = FALSE;
-int j_opt = FALSE;
-int k_opt = FALSE;
-int l_opt = FALSE;
-int m_opt = FALSE;
-int o_opt = FALSE;
-int p_opt = FALSE;
-int q_opt = FALSE;
-int r_opt = FALSE;
-int R_opt = FALSE;
-int u_opt = FALSE;
-int v_opt = FALSE;
-int z_opt = FALSE;
-int A_opt = FALSE;
-int P_opt = FALSE;
-int C_opt = FALSE;
-int J_opt = FALSE;
-int M_opt = FALSE;
-int N_opt = FALSE;
-int S_opt = FALSE;
-int V_opt = FALSE;
-int Depend_opt    = FALSE;
-int Interact_opt  = FALSE;
-int Stagein_opt   = FALSE;
-int Stageout_opt  = FALSE;
-int Sandbox_opt   = FALSE;
-int Grouplist_opt = FALSE;
-int Forwardx11_opt = FALSE;
+static int a_opt = FALSE;
+static int c_opt = FALSE;
+static int e_opt = FALSE;
+static int h_opt = FALSE;
+static int j_opt = FALSE;
+static int k_opt = FALSE;
+static int l_opt = FALSE;
+static int m_opt = FALSE;
+static int o_opt = FALSE;
+static int p_opt = FALSE;
+static int q_opt = FALSE;
+static int r_opt = FALSE;
+static int R_opt = FALSE;
+static int u_opt = FALSE;
+static int v_opt = FALSE;
+static int z_opt = FALSE;
+static int A_opt = FALSE;
+static int P_opt = FALSE;
+static int C_opt = FALSE;
+static int J_opt = FALSE;
+static int M_opt = FALSE;
+static int N_opt = FALSE;
+static int S_opt = FALSE;
+static int V_opt = FALSE;
+static int Depend_opt    = FALSE;
+static int Interact_opt  = FALSE;
+static int Stagein_opt   = FALSE;
+static int Stageout_opt  = FALSE;
+static int Sandbox_opt   = FALSE;
+static int Grouplist_opt = FALSE;
+static int Forwardx11_opt = FALSE;
 #ifdef WIN32
-int gui_opt = FALSE;
+static int gui_opt = FALSE;
 #endif
-int Resvstart_opt = FALSE;
-int Resvend_opt = FALSE;
-int pwd_opt = FALSE;
-int cred_opt = FALSE;
-int block_opt = FALSE;
-int relnodes_on_stageout_opt = FALSE;
-int roptarg_inter = FALSE;
-#ifndef WIN32
-int x11_disp = FALSE;
-#endif
-char *v_value = NULL;
-char *v_value_o = NULL;
-char *basic_envlist = NULL;
-char *qsub_envlist = NULL;
+static int Resvstart_opt = FALSE;
+static int Resvend_opt = FALSE;
+static int pwd_opt = FALSE;
+static int cred_opt = FALSE;
+static int block_opt = FALSE;
+static int relnodes_on_stageout_opt = FALSE;
+static int roptarg_inter = FALSE;
 
 /* for saving option booleans */
-int a_opt_o = FALSE;
-int c_opt_o = FALSE;
-int e_opt_o = FALSE;
-int h_opt_o = FALSE;
-int j_opt_o = FALSE;
-int k_opt_o = FALSE;
-int l_opt_o = FALSE;
-int m_opt_o = FALSE;
-int o_opt_o = FALSE;
-int p_opt_o = FALSE;
-int q_opt_o = FALSE;
-int r_opt_o = FALSE;
-int u_opt_o = FALSE;
-int v_opt_o = FALSE;
-int z_opt_o = FALSE;
-int A_opt_o = FALSE;
-int C_opt_o = FALSE;
-int J_opt_o = FALSE;
-int M_opt_o = FALSE;
-int N_opt_o = FALSE;
-int S_opt_o = FALSE;
-int V_opt_o = FALSE;
-int Depend_opt_o = FALSE;
-int Interact_opt_o = FALSE;
-int Stagein_opt_o = FALSE;
-int Stageout_opt_o = FALSE;
-int Sandbox_opt_o = FALSE;
-int Grouplist_opt_o = FALSE;
-int Forwardx11_opt_o = FALSE;
+static int a_opt_o = FALSE;
+static int c_opt_o = FALSE;
+static int e_opt_o = FALSE;
+static int h_opt_o = FALSE;
+static int j_opt_o = FALSE;
+static int k_opt_o = FALSE;
+static int l_opt_o = FALSE;
+static int m_opt_o = FALSE;
+static int o_opt_o = FALSE;
+static int p_opt_o = FALSE;
+static int q_opt_o = FALSE;
+static int r_opt_o = FALSE;
+static int u_opt_o = FALSE;
+static int v_opt_o = FALSE;
+static int z_opt_o = FALSE;
+static int A_opt_o = FALSE;
+static int C_opt_o = FALSE;
+static int J_opt_o = FALSE;
+static int M_opt_o = FALSE;
+static int N_opt_o = FALSE;
+static int S_opt_o = FALSE;
+static int V_opt_o = FALSE;
+static int Depend_opt_o = FALSE;
+static int Interact_opt_o = FALSE;
+static int Stagein_opt_o = FALSE;
+static int Stageout_opt_o = FALSE;
+static int Sandbox_opt_o = FALSE;
+static int Grouplist_opt_o = FALSE;
+static int Forwardx11_opt_o = FALSE;
 #ifdef WIN32
-int gui_opt_o = FALSE;
+static int gui_opt_o = FALSE;
 #endif
-int Resvstart_opt_o = FALSE;
-int Resvend_opt_o = FALSE;
-int pwd_opt_o = FALSE;
-int cred_opt_o = FALSE;
-int block_opt_o = FALSE;
-int relnodes_on_stageout_opt_o = FALSE;
-int P_opt_o = FALSE;
+static int Resvstart_opt_o = FALSE;
+static int Resvend_opt_o = FALSE;
+static int pwd_opt_o = FALSE;
+static int cred_opt_o = FALSE;
+static int block_opt_o = FALSE;
+static int relnodes_on_stageout_opt_o = FALSE;
+static int P_opt_o = FALSE;
 
-int no_background = 0;
-
-char  roptarg = 'y';
-
-char cred_name[32];	/* space to hold small credential name */
-#ifdef WIN32
-char intergui_warn[] = "qsub: only interactive jobs can have GUI\n";
-#endif
-char interblock_warn[] = "qsub (Warning) : setting \"block\" attribute as \"true\""
-	" for an interactive job will not return job's exit status\n";
-char interarray[] = "qsub: interactive and array job submission cannot be used together\n";
-char norerunarray[] = "qsub:  cannot submit non-rerunable Array Job\n";
-char reruninteract[] = "qsub (Warning): Interactive jobs will be treated as not rerunnable\n";
-char badw[] = "qsub: illegal -W value\n";
-
-static int	cs_init = 0;	/*1==security library initialized, 0==not initialized*/
-
-static int 	cred_type = -1;
-static size_t	cred_len = 0;
-static char	*cred_buf = NULL;
-#if defined(PBS_PASS_CREDENTIALS)
-static char	passwd_buf[PBS_MAXPWLEN] = {'\0'};
-#endif
-static char	pbs_o_env[] = "PBS_O_";
-static char	*tmpdir = NULL;
 
 /*
  * The following bunch of functions are "Utility" functions.
@@ -5272,8 +5267,7 @@ do_submit2(char *rmsg)
 		}
 	}
 
-	/* original v_value also needs to be saved as it gets mangled */
-	/* inside set_job_env() */
+	/* original v_value also needs to be saved as it gets mangled inside set_job_env() */
 	if (v_value != NULL) {
 		if (v_value_o != NULL)
 			free(v_value_o);
