@@ -1033,8 +1033,7 @@ port_X11(void)
  *
  */
 static void
-settermraw(ptio)
-	struct termios *ptio;
+settermraw(struct termios *ptio)
 {
 	struct termios tio;
 
