@@ -3656,8 +3656,8 @@ get_script(FILE *file, char *script, char *prefix)
 
 	_snprintf(tmp_name, MAXPATHLEN, "%s\\%s", tmpdir, tmp_template);
 	if ((in = _mktemp(tmp_name)) != NULL) {
-		strncpy(script, tmp_name, sizeof(script));
-		script[sizeof(script)-1] = 0;
+		strncpy(script, tmp_name, MAXPATHLEN);
+		script[MAXPATHLEN] = 0;
 		if ((TMP_FILE = fopen(in, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -3669,8 +3669,8 @@ get_script(FILE *file, char *script, char *prefix)
 	snprintf(tmp_name, MAXPATHLEN, "%s/%s", tmpdir, tmp_template);
 	fds = mkstemp(tmp_name);	/* returns file descriptor */
 	if (fds != -1) {
-		strncpy(script, tmp_name, sizeof(script));
-		script[sizeof(script)-1] = 0;
+		strncpy(script, tmp_name, MAXPATHLEN);
+		script[MAXPATHLEN] = 0;
 		if ((TMP_FILE = fdopen(fds, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -4027,7 +4027,7 @@ job_env_basic(void)
 #ifdef WIN32
 			back2forward_slash(c_escaped);
 #endif
-			strncpy(p, c_escaped, strlen(c_escaped)); /* TODO: is this safe? */
+			strncpy(p, c_escaped, strlen(c_escaped));
 			free(c_escaped);
 			c_escaped = NULL;
 		} else
