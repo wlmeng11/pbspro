@@ -5000,7 +5000,7 @@ do_submit(char *retmsg)
 			if (get_grid_proxy())
 				return 1;
 		} else {
-			strncpy(retmsg, "qsub: unknown credential type\n", MAXPATHLEN);
+			snprintf(retmsg, MAXPATHLEN, "qsub: unknown credential type\n");
 			return 1;
 		}
 	}
