@@ -3445,7 +3445,7 @@ process_special_args(int const argc, char ** const argv, char * const script)
 			if (!N_opt)	/* '-N' is not set */
 				set_attr(&attrib, ATTR_N, "STDIN");
 		} else {
-			snprintf(script, sizeof(script), "%s", argv[optind]);
+			snprintf(script, MAXPATHLEN, "%s", argv[optind]);
 		}
 	}
 	return command_flag;
