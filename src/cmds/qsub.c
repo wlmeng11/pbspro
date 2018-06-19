@@ -731,14 +731,13 @@ x11_get_authstring(void)
 			return NULL;
 		}
 	}
-	strncpy(command, line, strlen(line) - X11_MSG_OFFSET);
+	strncpy(command, line, strlen(line) - X11_MSG_OFFSET); /* safe because strlen(line) <= sizeof(command) */
 
 	if (p != NULL)
 		p = strchr(p, '.');
 
 	if (p != NULL) {
-		strncpy(screen, p + 1, sizeof(screen));
-		screen[sizeof(screen)-1] = 0;
+		snprintf(screen, sizeof(screen), "%s", p+1);
 	}
 	else
 		strcpy(screen, "0"); /* safe as long as XAUTH_LEN >= 2 */
@@ -1330,14 +1329,12 @@ send_term(int sock)
 	char *term;
 	char  cc_array[PBS_TERM_CCA];
 
-	(void)strcpy(buf, "TERM="); /* safe as long as PBS_TERM_BUF_SZ >= 6 */
 	term = getenv("TERM");
 	term = strdup_esc_commas(term);
 	if (term == NULL)
-		(void)strcat(buf, "unknown"); /* safe as long as PBS_TERM_BUF_SZ >= 13 */
+		snprintf(buf, sizeof(buf), "TERM=unknown");
 	else {
-		(void)strncat(buf, term, PBS_TERM_BUF_SZ-5);
-		buf[sizeof(buf)-1] = 0;
+		snprintf(buf, sizeof(buf), "TERM=%s", term);
 		free(term);
 	}
 	(void)CS_write(sock, buf, PBS_TERM_BUF_SZ);
@@ -2577,9 +2574,7 @@ get_krb5_ticket(char *remote)
 		}
 	}
 
-	snprintf(server_name, sizeof(server_name), "host/%s@", remote);
-	strncat(server_name, client->realm.data, sizeof(server_name)-strlen(server_name));
-	server_name[sizeof(server_name)-1] = 0;
+	snprintf(server_name, sizeof(server_name), "host/%s@%s", remote, client->realm.data);
 	krb5_parse_name(ktext, server_name, &server);
 	server->type = KRB5_NT_SRV_HST;
 
@@ -2931,8 +2926,7 @@ process_opts(int argc, char **argv, int passet)
 			case 'C':
 				if_cmd_line(C_opt) {
 					C_opt = passet;
-					strncpy(dir_prefix, optarg, sizeof(dir_prefix));
-					dir_prefix[sizeof(dir_prefix)-1] = 0;
+					snprintf(dir_prefix, sizeof(dir_prefix), "%s", optarg);
 				}
 				break;
 			case 'e':
@@ -3047,8 +3041,7 @@ process_opts(int argc, char **argv, int passet)
 										exit(2);
 									}
 								}
-								pattr->value[N_len] = '\0';
-								strncpy(pattr->value, optarg, N_len);
+								strcpy(pattr->value, optarg); /* safe because we just allocated enough space */
 							}
 						}
 					}
@@ -3070,8 +3063,7 @@ process_opts(int argc, char **argv, int passet)
 			case 'q':
 				if_cmd_line(q_opt) {
 					q_opt = passet;
-					strcpy(destination, optarg);
-					destination[sizeof(destination)-1] = 0;
+					snprintf(destination, sizeof(destination), "%s", optarg);
 				}
 				break;
 			case 'r':
@@ -3301,8 +3293,7 @@ process_opts(int argc, char **argv, int passet)
 					} else if (strcmp(keyword, ATTR_cred) == 0) {
 						if_cmd_line(cred_opt) {
 							cred_opt = passet;
-							strncpy(cred_name, valuewd, sizeof(cred_name));
-							cred_name[sizeof(cred_name)-1] = 0;
+							snprintf(cred_name, sizeof(cred_name), "%s", valuewd);
 							set_attr(&attrib, ATTR_cred, valuewd);
 						}
 					} else {
@@ -3450,8 +3441,7 @@ process_special_args(int const argc, char ** const argv, char * const script)
 			if (!N_opt)	/* '-N' is not set */
 				set_attr(&attrib, ATTR_N, "STDIN");
 		} else {
-			strncpy(script, argv[optind], MAXPATHLEN); /* sizeof(script) is MAXPATHLEN+1 */
-			script[MAXPATHLEN] = '\0';
+			snprintf(script, sizeof(script), "%s", argv[optind]);
 		}
 	}
 	return command_flag;
@@ -3656,8 +3646,7 @@ get_script(FILE *file, char *script, char *prefix)
 
 	_snprintf(tmp_name, MAXPATHLEN, "%s\\%s", tmpdir, tmp_template);
 	if ((in = _mktemp(tmp_name)) != NULL) {
-		strncpy(script, tmp_name, MAXPATHLEN);
-		script[MAXPATHLEN] = 0;
+		snprintf(script, MAXPATHLEN, "%s", tmp_name);
 		if ((TMP_FILE = fopen(in, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -3669,8 +3658,7 @@ get_script(FILE *file, char *script, char *prefix)
 	snprintf(tmp_name, MAXPATHLEN, "%s/%s", tmpdir, tmp_template);
 	fds = mkstemp(tmp_name);	/* returns file descriptor */
 	if (fds != -1) {
-		strncpy(script, tmp_name, MAXPATHLEN);
-		script[MAXPATHLEN] = 0;
+		snprintf(script, MAXPATHLEN, "%s", tmp_name);
 		if ((TMP_FILE = fdopen(fds, "w+")) == NULL)
 			err = 1;
 	} else {
@@ -3827,8 +3815,7 @@ read_job_script(char * const script)
 				else
 					bnp = script;
 
-				(void)strncpy(basename, bnp, PBS_MAXJOBNAME);
-				basename[PBS_MAXJOBNAME] = '\0';
+				snprintf(basename, sizeof(basename), "%s", bnp);
 				/*
 				 * set ATTR_N directly - verification would be done
 				 * by IFL later
@@ -4016,8 +4003,7 @@ job_env_basic(void)
 		char *c_escaped = NULL;
 
 		/* save current working dir for daemon */
-		strncpy(qsub_cwd, c, sizeof(qsub_cwd));
-		qsub_cwd[sizeof(qsub_cwd)] = 0;
+		snprintf(qsub_cwd, sizeof(qsub_cwd), "%s", c);
 #ifdef WIN32
 		/* get UNC path (if available) if it is mapped drive */
 		get_uncpath(c);
@@ -5680,8 +5666,7 @@ do_daemon_stuff(void)
 	}
 
 	s_un.sun_family = AF_UNIX;
-	(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
-	s_un.sun_path[sizeof(s_un.sun_path)-1] = 0;
+	snprintf(s_un.sun_path, sizeof(s_un.sun_path), "%s", fl);
 
 	if (bind(bindfd, (const struct sockaddr *) &s_un, sizeof(s_un)) == -1)
 		exit(1); /* dont go to error */
@@ -6084,8 +6069,7 @@ again:
 			return rc;
 
 		s_un.sun_family = AF_UNIX;
-		(void) strncpy(s_un.sun_path, fl, sizeof(s_un.sun_path));
-		s_un.sun_path[sizeof(s_un.sun_path)-1] = 0;
+		snprintf(s_un.sun_path, sizeof(s_un.sun_path), "%s", fl);
 
 		if (connect(sock, (const struct sockaddr *) &s_un,  sizeof(s_un)) == -1) {
 			int	refused = (errno == ECONNREFUSED);
@@ -6245,9 +6229,8 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		exit(0);
 	}
 
-	strncpy(qsub_exe, argv[0], sizeof(qsub_exe)); /* note the name of the qsub executable */
-	qsub_exe[sizeof(qsub_exe)-1] = 0;
-	if (strlen(qusb_exe) != strlen(argv[0])) {
+	/* note the name of the qsub executable */
+	if (snprintf(qsub_exe, sizeof(qsub_exe), "%s", argv[0]) != sizeof(qsub_exe)) {
 		fprintf(stderr, "qsub: Name of executable is too long\n");
 		exit_qsub(2);
 	}
@@ -6295,8 +6278,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 		(void)unlink(script_tmp);
 		exit_qsub(2);
 	} else if (notNULL(s_n_out)) {
-			strncpy(server_out, s_n_out, sizeof(server_out));
-			server_out[sizeof(server_out)-1] = 0;
+		snprintf(server_out, sizeof(server_out), "%s", s_n_out);
 	}
 
 	/* Get required environment variables to be sent to the server. */
