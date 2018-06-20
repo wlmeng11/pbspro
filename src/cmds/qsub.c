@@ -261,16 +261,16 @@ static int o_opt = FALSE;
 static int p_opt = FALSE;
 static int q_opt = FALSE;
 static int r_opt = FALSE;
-static int R_opt = FALSE;
 static int u_opt = FALSE;
 static int v_opt = FALSE;
 static int z_opt = FALSE;
 static int A_opt = FALSE;
-static int P_opt = FALSE;
 static int C_opt = FALSE;
 static int J_opt = FALSE;
 static int M_opt = FALSE;
 static int N_opt = FALSE;
+static int P_opt = FALSE;
+static int R_opt = FALSE;
 static int S_opt = FALSE;
 static int V_opt = FALSE;
 static int Depend_opt    = FALSE;
@@ -312,6 +312,7 @@ static int C_opt_o = FALSE;
 static int J_opt_o = FALSE;
 static int M_opt_o = FALSE;
 static int N_opt_o = FALSE;
+static int P_opt_o = FALSE;
 static int S_opt_o = FALSE;
 static int V_opt_o = FALSE;
 static int Depend_opt_o = FALSE;
@@ -320,7 +321,6 @@ static int Stagein_opt_o = FALSE;
 static int Stageout_opt_o = FALSE;
 static int Sandbox_opt_o = FALSE;
 static int Grouplist_opt_o = FALSE;
-static int Forwardx11_opt_o = FALSE;
 #ifdef WIN32
 static int gui_opt_o = FALSE;
 #endif
@@ -330,7 +330,6 @@ static int pwd_opt_o = FALSE;
 static int cred_opt_o = FALSE;
 static int block_opt_o = FALSE;
 static int relnodes_on_stageout_opt_o = FALSE;
-static int P_opt_o = FALSE;
 
 
 /*
@@ -5059,25 +5058,24 @@ save_opts()
 	J_opt_o = J_opt;
 	M_opt_o = M_opt;
 	N_opt_o = N_opt;
+	P_opt_o = P_opt;
 	S_opt_o = S_opt;
 	V_opt_o = V_opt;
 	Depend_opt_o = Depend_opt;
 	Interact_opt_o = Interact_opt;
-#ifdef WIN32
-	gui_opt_o = gui_opt;
-#endif
 	Stagein_opt_o = Stagein_opt;
 	Stageout_opt_o = Stageout_opt;
 	Sandbox_opt_o = Sandbox_opt;
 	Grouplist_opt_o = Grouplist_opt;
+#ifdef WIN32
+	gui_opt_o = gui_opt;
+#endif
 	Resvstart_opt_o = Resvstart_opt;
 	Resvend_opt_o = Resvend_opt;
 	pwd_opt_o = pwd_opt;
 	cred_opt_o = cred_opt;
 	block_opt_o = block_opt;
 	relnodes_on_stageout_opt_o = relnodes_on_stageout_opt;
-	P_opt_o = P_opt;
-
 }
 
 /**
@@ -5109,6 +5107,7 @@ restore_opts()
 	J_opt = J_opt_o;
 	M_opt = M_opt_o;
 	N_opt = N_opt_o;
+	P_opt = P_opt_o;
 	S_opt = S_opt_o;
 	V_opt = V_opt_o;
 	Depend_opt = Depend_opt_o;
@@ -5123,7 +5122,6 @@ restore_opts()
 	cred_opt = cred_opt_o;
 	block_opt = block_opt_o;
 	relnodes_on_stageout_opt = relnodes_on_stageout_opt_o;
-	P_opt = P_opt_o;
 }
 
 /**
