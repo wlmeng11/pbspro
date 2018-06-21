@@ -6181,7 +6181,7 @@ main(int argc, char **argv, char **envp)   /* qsub */
 	/* server:port to send request to */
 	char *cmdargs = NULL;
 	int command_flag = 0;
-	int rc; /* error code for submit */
+	int rc = 0; /* error code for submit */
 	int do_regular_submit = 1; /* used if daemon based submit fails */
 #ifdef WIN32 /* Windows */
 	char qsub_exe[MAXPATHLEN+1];
