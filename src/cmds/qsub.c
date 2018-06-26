@@ -2832,7 +2832,7 @@ process_opts(int argc, char **argv, int passet)
 	char *valuewd;
 	char *pc;
 	struct attrl *pattr = NULL;
-	int N_len = 0;
+	size_t N_len = 0;
 #ifdef WIN32
 	struct attrl *ap = NULL;
 	short int nSizeofHostName = 0;
@@ -3539,14 +3539,14 @@ make_argv(int *argc, char *argv[], char *line)
  *
  */
 static int
-do_dir(char *opts, int opt_pass, char *retmsg, int ret_size)
+do_dir(char *opts, int opt_pass, char *retmsg, size_t ret_size)
 {
 	int argc;
 	int ret = -1;
 	int index = 0;
 	int len = 0;
 	int nxt_pos = 0;
-	int max_size = ret_size - 2 /* 2 deducted for adding newline at end */;
+	size_t max_size = ret_size - 2 /* 2 deducted for adding newline at end */;
 #define MAX_ARGV_LEN 128
 	static char *vect[MAX_ARGV_LEN+1];
 
