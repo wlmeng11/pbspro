@@ -5579,6 +5579,14 @@ static int
 daemon_submit(const char *qsub_exe, int *do_regular_submit)
 {
 	int rc = 0;
+	HANDLE hFile;
+	SECURITY_ATTRIBUTES sa;
+	STARTUPINFO si = {sizeof(si)};
+	PROCESS_INFORMATION pi;
+	char cmd_line[2*MAXPATHLEN + 1];
+	int created = 0;
+	HANDLE hEvent;
+
 	/* determine pipe name */
 	get_comm_filename(fl);
 
@@ -5604,13 +5612,6 @@ daemon_submit(const char *qsub_exe, int *do_regular_submit)
 	 * and signals this event to tell the foreground process to continue
 	 * and  try to connect to it via this new named pipe.
 	 */
-	HANDLE hFile;
-	SECURITY_ATTRIBUTES sa;
-	STARTUPINFO si = {sizeof(si)};
-	PROCESS_INFORMATION pi;
-	char cmd_line[2*MAXPATHLEN + 1];
-	int created = 0;
-	HANDLE hEvent;
 
 again:
 	hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
