@@ -1451,6 +1451,42 @@ bailout(int ret)
 	exit_qsub(ret);
 }
 
+/**
+ * @brief
+ *  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified.
+ */
+static void
+enable_gui(void)
+{
+#ifndef WIN32 /* Unix */
+	char *x11authstr = NULL;
+	if (Forwardx11_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
+			exit_qsub(1);
+		}
+		/* get the DISPLAY's auth protocol, hexdata, and screen number */
+		if ((x11authstr = x11_get_authstring()) != NULL) {
+			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
+			set_attr(&attrib, ATTR_X11_port, port_X11());
+#ifdef DEBUG
+			fprintf(stderr, "x11auth string: %s\n", x11authstr);
+#endif
+		} else {
+			exit_qsub(1);
+		}
+	}
+#else /* Windows */
+	if (gui_opt) {
+		if (!Interact_opt) {
+			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
+			exit_qsub(1);
+		}
+		set_attr(&attrib, ATTR_GUI, "TRUE");
+	}
+#endif
+}
+
 #ifndef WIN32
 /**
  * @brief
@@ -1540,42 +1576,6 @@ x11handler(int X_data_socket, int interactive_reader_socket)
 
 	port_forwarder(socks, x11_connect_display, display, 0,
 		interactive_reader_socket, reader_Xjob, log_cmds_portfw_msg);
-}
-
-/**
- * @brief
- *  Enable X11 Forwarding (on Unix) or GUI (on Windows) if specified.
- */
-static void
-enable_gui(void)
-{
-#ifndef WIN32 /* Unix */
-	char *x11authstr = NULL;
-	if (Forwardx11_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: X11 Forwarding possible only for interactive jobs\n");
-			exit_qsub(1);
-		}
-		/* get the DISPLAY's auth protocol, hexdata, and screen number */
-		if ((x11authstr = x11_get_authstring()) != NULL) {
-			set_attr(&attrib, ATTR_X11_cookie, x11authstr);
-			set_attr(&attrib, ATTR_X11_port, port_X11());
-#ifdef DEBUG
-			fprintf(stderr, "x11auth string: %s\n", x11authstr);
-#endif
-		} else {
-			exit_qsub(1);
-		}
-	}
-#else /* Windows */
-	if (gui_opt) {
-		if (!Interact_opt) {
-			fprintf(stderr, "qsub: only interactive jobs can have GUI display\n");
-			exit_qsub(1);
-		}
-		set_attr(&attrib, ATTR_GUI, "TRUE");
-	}
-#endif
 }
 
 /**
