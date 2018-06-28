@@ -1137,10 +1137,10 @@ reader(int s)
  *
  * @param[in] s - socket descriptor from where data is to be read.
  *
- * @return	int
- * @retval	 0	Success
- * @retval	-1	Failure
- * @retval      -2      Peer Closed connection
+ * @return  int
+ * @retval   0  Success
+ * @retval  -1  Failure
+ * @retval  -2  Peer Closed connection
  *
  */
 static int
@@ -1934,12 +1934,9 @@ interactive(void)
 	 */
 	if(gui_opt != FALSE)
 	{
-		char		rdp_command[PBS_CMDLINE_LENGTH] = {'\0'};
-		int		flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
-		int		rc = 0;
-		struct hostent	*hp = NULL;
-		char		hname[PBS_MAXHOSTNAME + 1] = {'\0'};
-		int		i = 0;
+		struct hostent *hp = NULL;
+		char hname[PBS_MAXHOSTNAME + 1] = {'\0'};
+		int	i = 0;
 
 		/* Check whether the Mom host is same as submission host */
 		(void)gethostname(hname, PBS_MAXHOSTNAME);
@@ -1953,6 +1950,10 @@ interactive(void)
 		}
 		/* Invoke remote viewer client only if the execution host is not same as submission host */
 		if(is_mom_local == 0) {
+			char rdp_command[PBS_CMDLINE_LENGTH] = {'\0'};
+			int	flags = CREATE_NO_WINDOW | CREATE_SUSPENDED;
+			int	rc = 0;
+
 			pbs_loadconf(0);
 			if(pbs_conf.pbs_conf_remote_viewer)
 				/* Invoke remote viewer client configured */
@@ -3775,10 +3776,6 @@ static void
 read_job_script(char * const script)
 {
 	int errflg; /* error code from get_script() */
-	struct stat statbuf;
-	char *bnp;
-	char  basename[PBS_MAXJOBNAME+1]; /* base name of script for job name*/
-	FILE *f; /* FILE pointer to the script */
 
 	/* if script is empty, get standard input */
 	if ((strcmp(script, "") == 0) || (strcmp(script, "-") == 0)) {
@@ -3803,6 +3800,11 @@ read_job_script(char * const script)
 			}
 		}
 	} else {  /* non-empty script, read it for directives */
+		struct stat statbuf;
+		char *bnp;
+		char  basename[PBS_MAXJOBNAME+1]; /* base name of script for job name*/
+		FILE *f; /* FILE pointer to the script */
+
 		if (stat(script, &statbuf) < 0) {
 			perror("qsub: script file:");
 			exit_qsub(1);
