@@ -3982,6 +3982,7 @@ job_env_basic(void)
 			ino = statbuf.st_ino;
 			if (stat(".", &statbuf) < 0) {
 				perror("qsub: cannot stat current directory: ");
+				free(job_env);
 				return NULL;
 			}
 			/* compare against "." */
@@ -4043,6 +4044,7 @@ job_env_basic(void)
 #endif
 	else {
 		perror("qsub: cannot get uname info:");
+		free(job_env);
 		return NULL;
 	}
 
@@ -4172,6 +4174,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		switch (*c) {
 			case ',':
 			case '=':
+				free(job_env);
 				return FALSE;
 			case '\0':
 				goto final;
@@ -4197,7 +4200,10 @@ set_job_env(char *basic_vlist, char *current_vlist)
 			/* do not add PBS_O_* env variables, as these are set by qsub */
 
 			env = getenv(s);
-			if (env == NULL) return FALSE;
+			if (env == NULL) {
+				free(job_env);
+				return FALSE;
+			}
 
 			strcat(job_env, ",");
 			strcat(job_env, s);
@@ -4205,8 +4211,10 @@ set_job_env(char *basic_vlist, char *current_vlist)
 #ifdef WIN32
 			back2forward_slash(env);
 #endif
-			if (copy_env_value(job_env, env, 1) == NULL)
+			if (copy_env_value(job_env, env, 1) == NULL) {
+				free(job_env);
 				return FALSE;
+			}
 		}
 
 		if (l == ',')
@@ -4221,6 +4229,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		if (v_opt && Forwardx11_opt) {
 			if (strcmp(s, "DISPLAY") == 0) {
 				x11_disp = TRUE;
+				free(job_env);
 				return FALSE;
 			}
 		}
@@ -4232,8 +4241,10 @@ set_job_env(char *basic_vlist, char *current_vlist)
 #ifdef WIN32
 		back2forward_slash(c);
 #endif
-		if ((c = copy_env_value(job_env, c, 0)) == NULL)
+		if ((c = copy_env_value(job_env, c, 0)) == NULL) {
+			free(job_env);
 			return FALSE;
+		}
 
 		/* Have to undo here, since 'c' was incremented by copy_env_value */
 		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env)-1) == 0)
