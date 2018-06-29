@@ -624,15 +624,12 @@ expand_varlist(char *varlist)
 
 		p1 = comma_token(NULL);
 	}
-	if (v_value2 != NULL)
-		free(v_value2);
+	free(v_value2);
 	return (v_value1);
 
 expand_varlist_err:
-	if (v_value1 != NULL)
-		free(v_value1);
-	if (v_value2 != NULL)
-		free(v_value2);
+	free(v_value1);
+	free(v_value2);
 	return NULL;
 }
 
@@ -3114,8 +3111,7 @@ process_opts(int argc, char **argv, int passet)
 			case 'v':
 				if_cmd_line(v_opt) {
 					v_opt = passet;
-					if (v_value != NULL)
-						free(v_value);
+					free(v_value);
 #ifdef WIN32
 					/*
 					 * Need to change '\' to '/' before expanding the
@@ -3487,7 +3483,7 @@ make_argv(int *argc, char *argv[], char *line)
 			*b++ = *c++;
 		} else if (isspace(*c)) {
 			len = c - l;
-			if (argv[*argc] != NULL) free(argv[*argc]);
+			free(argv[*argc]);
 			argv[*argc] = (char *) malloc(len + 1);
 			if (argv[*argc] == NULL) {
 				fprintf(stderr, "qsub: out of memory\n");
@@ -3503,8 +3499,7 @@ make_argv(int *argc, char *argv[], char *line)
 	}
 	if (c != l) {
 		len = c - l;
-		if (argv[*argc] != NULL)
-			free(argv[*argc]);
+		free(argv[*argc]);
 		argv[*argc] = (char *) malloc(len + 1);
 		if (argv[*argc] == NULL) {
 			fprintf(stderr, "qsub: out of memory\n");
@@ -4296,10 +4291,8 @@ resize_buffer(int bufused, int lenreq)
 		lenreq += 1000; /* adding 1000 so that we realloc fewer times */
 		p = realloc(buf, lenreq);
 		if (p == NULL) {
-			if (buf) {
-				free(buf);
-				buf = NULL;
-			}
+			free(buf);
+			buf = NULL;
 			buflen = 0;
 			return -1;
 		}
@@ -5140,8 +5133,7 @@ free_attrl(struct attrl *attrib)
 
 	while (attrib) {
 		free(attrib->name);
-		if (attrib->resource)
-			free(attrib->resource);
+		free(attrib->resource);
 		free(attrib->value);
 
 		attr = attrib;
@@ -5264,8 +5256,7 @@ do_submit2(char *rmsg)
 
 	/* original v_value also needs to be saved as it gets mangled inside set_job_env() */
 	if (v_value != NULL) {
-		if (v_value_o != NULL)
-			free(v_value_o);
+		free(v_value_o);
 		v_value_o = strdup(v_value);
 		if (v_value_o == NULL) {
 			snprintf(rmsg, MAXPATHLEN-1,
@@ -5303,8 +5294,7 @@ do_submit2(char *rmsg)
 
 		/* use original -v value */
 		if (v_value_o != NULL) {
-			if (v_value != NULL)
-				free(v_value);
+			free(v_value);
 			v_value = strdup(v_value_o);
 			if (v_value == NULL) {
 				snprintf(rmsg, MAXPATHLEN-1,
@@ -5527,18 +5517,12 @@ do_daemon_stuff(char *file, char *handle, char *server)
 		free_attrl(attrib);
 		attrib = NULL;
 
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
+		free(v_value);
+		v_value = NULL;
+		free(basic_envlist);
+		basic_envlist = NULL;
+		free(qsub_envlist);
+		qsub_envlist = NULL;
 
 		if (cred_buf != NULL) {
 			memset(cred_buf, 0, cred_len);
@@ -5931,18 +5915,12 @@ do_daemon_stuff(void)
 
 		free_attrl(attrib);
 		attrib = NULL;
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
+		free(v_value);
+		v_value = NULL;
+		free(basic_envlist);
+		basic_envlist = NULL;
+		free(qsub_envlist);
+		qsub_envlist = NULL;
 
 		if (cred_buf != NULL) {
 			memset(cred_buf, 0, cred_len);
@@ -6007,18 +5985,12 @@ fork_and_stay(void)
 		/* clear off all the attributes */
 		free_attrl(attrib);
 		attrib = NULL;
-		if (v_value != NULL) {
-			free(v_value);
-			v_value = NULL;
-		}
-		if (basic_envlist != NULL) {
-			free(basic_envlist);
-			basic_envlist = NULL;
-		}
-		if (qsub_envlist != NULL) {
-			free(qsub_envlist);
-			qsub_envlist = NULL;
-		}
+		free(v_value);
+		v_value = NULL;
+		free(basic_envlist);
+		basic_envlist = NULL;
+		free(qsub_envlist);
+		qsub_envlist = NULL;
 
 		/* set single threaded mode */
 		pbs_client_thread_set_single_threaded_mode();
