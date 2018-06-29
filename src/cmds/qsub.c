@@ -2374,9 +2374,6 @@ get_cred_from_cache(krb5_context context, krb5_ccache cc, krb5_creds *creds,
 		KDC_OPT_FORWARDED;
 
 	retval = krb5_get_cred_via_tkt(context, &tgt, kdcoptions, addrs, creds, pcreds);
-done:
-	krb5_free_cred_contents(context, &tgt);
-	return retval;
 }
 
 /**
