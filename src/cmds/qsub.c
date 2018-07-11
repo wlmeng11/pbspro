@@ -224,14 +224,14 @@ static char qsub_cwd[MAXPATHLEN + 1]; /* global var to pass cwd to background qs
 static struct attrl *attrib = NULL; /* Attribute list */
 static struct attrl *attrib_o = NULL; /* Original attribute list, before applying default_qsub_arguments */
 static char *new_jobname = NULL; /* return from submit request */
-static char dir_prefix[MAX_QSUB_PREFIX_LEN+1]; /* Directive Prefix, specified by C opt */
+static char dir_prefix[MAX_QSUB_PREFIX_LEN + 1]; /* Directive Prefix, specified by C opt */
 static char destination[PBS_MAXDEST]; /* Destination of the batch job, specified by q opt */
-static char server_out[PBS_MAXSERVERNAME+PBS_MAXPORTNUM+2]; /* Destination server, parsed from destination[] */
+static char server_out[PBS_MAXSERVERNAME + PBS_MAXPORTNUM + 2]; /* Destination server, parsed from destination[] */
 static struct batch_status *ss = NULL;
 static char *dfltqsubargs = NULL; /* Default qsub arguments */
 static int sd_svr; /* return from pbs_connect */
-static char script_tmp[MAXPATHLEN+1] = ""; /* name of script file copy */
-static char fl[2*MAXPATHLEN+1]; /* the filename used as the pipe name */
+static char script_tmp[MAXPATHLEN + 1] = ""; /* name of script file copy */
+static char fl[2 * MAXPATHLEN + 1]; /* the filename used as the pipe name */
 #define BUFSIZE 1024 /* windows default pipe buffer size */
 #define PIPE_TIMEOUT 0 /* default windows pipe timeout */
 static char *pbs_hostvar = NULL; /* buffer containing ",PBS_O_HOST=" and host name */
@@ -415,7 +415,7 @@ comma_token(char *str)
 				break; /* comma inside quotes, keep scanning */
 
 			case ESC_CHAR: /* pass over next char */
-				if (*(p+1) != 0) /* check '\' is not last */
+				if (*(p + 1) != 0) /* check '\' is not last */
 					p++;
 				break;
 		}
@@ -431,9 +431,9 @@ comma_token(char *str)
  * @param[in]   pv	- The source address
  * @param[in]   quote_flg - Whether quote characters should be escaped
  *
- * @return      char*
+ * @return	char*
  * @retval	NULL - Failure
- * @retval      !NULL - Success - Pointer to pv parameter
+ * @retval	!NULL - Success - Pointer to pv parameter
  */
 static char *
 copy_env_value(char *dest, /* destination */
@@ -448,7 +448,7 @@ copy_env_value(char *dest, /* destination */
 	while (*dest)
 		++dest;
 
-	is_func = ((*pv == '(') && (*(pv+1) == ')') && (*(pv+2) == ' ') && (*(pv+3) == '{'));
+	is_func = ((*pv == '(') && (*(pv + 1) == ')') && (*(pv + 2) == ' ') && (*(pv + 3) == '{'));
 
 	/*
 	 * Keep the list of special characters consistent with encode_arst_bs()
@@ -476,7 +476,7 @@ copy_env_value(char *dest, /* destination */
 
 			case ESC_CHAR: /* backslash in value, escape it */
 				*dest++ = *pv;
-				if (*(pv+1) != ',') /* do not escape if ESC_CHAR already escapes */
+				if (*(pv + 1) != ',') /* do not escape if ESC_CHAR already escapes */
 					*dest++ = *pv;
 				break;
 
@@ -484,7 +484,7 @@ copy_env_value(char *dest, /* destination */
 				if (q_ch || quote_flg) {
 					*dest++ = ESC_CHAR;
 					*dest++ = *pv;
-				} else if (dest_full != dest && *(dest-1) == ESC_CHAR) { /* the comma is escaped, not finished yet */
+				} else if (dest_full != dest && *(dest - 1) == ESC_CHAR) { /* the comma is escaped, not finished yet */
 					*dest++ = *pv;
 				} else {
 					go = 0; /* end of value string */
@@ -493,7 +493,7 @@ copy_env_value(char *dest, /* destination */
 
 			case ';':
 				*dest++ = *pv;
-				if (is_func && (*(pv+1) == '\n'))
+				if (is_func && (*(pv + 1) == '\n'))
 					pv++;
 				break;
 
@@ -582,9 +582,9 @@ expand_varlist(char *varlist)
 		vv = NULL;
 		if ((p2=strchr(p1, '=')) != NULL) {
 			*p2 = '\0';
-			vv = p2+1;
+			vv = p2 + 1;
 		}
-		if ((vv == NULL) && (strncmp(vn, pbs_o_env, sizeof(pbs_o_env)-1) != 0)) {
+		if ((vv == NULL) && (strncmp(vn, pbs_o_env, sizeof(pbs_o_env) - 1) != 0)) {
 			/* do not add PBS_O_* env variables, as these */
 			/* are set by qsub */
 
@@ -684,7 +684,9 @@ x11_get_authstring(void)
 {
 	char line[XAUTH_LEN] = {0};
 	char command[XAUTH_LEN] = {0};
-	char protocol[XAUTH_LEN], hexdata[XAUTH_LEN], screen[XAUTH_LEN];
+	char protocol[XAUTH_LEN];
+	char hexdata[XAUTH_LEN];
+	char screen[XAUTH_LEN];
 	char format[XAUTH_LEN];
 	char *authstring = NULL;
 	FILE *f;
@@ -736,11 +738,10 @@ x11_get_authstring(void)
 	if (p != NULL)
 		p = strchr(p, '.');
 
-	if (p != NULL) {
-		snprintf(screen, sizeof(screen), "%s", p+1);
-	}
+	if (p != NULL)
+		snprintf(screen, sizeof(screen), "%s", p + 1);
 	else
-		strcpy(screen, "0"); /* safe as long as XAUTH_LEN >= 2 */
+		strcpy(screen, "0"); /* Should be safe because sizeof(screen) = XAUTH_LEN which is >= 2 */
 
 #ifdef DEBUG
 	fprintf(stderr, "x11_get_authstring: %s\n", line);
@@ -1588,9 +1589,9 @@ static void
 interactive(void)
 {
 	int amt;
-	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM+2];
+	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM + 2];
 	pbs_socklen_t fromlen;
-	char momjobid[PBS_MAXSVRJOBID+1];
+	char momjobid[PBS_MAXSVRJOBID + 1];
 	int news;
 	int nsel;
 	char *pc;
@@ -1665,7 +1666,7 @@ interactive(void)
 		}
 		if (nsel == 0) {
 			/* connect to server, status job to see if still there */
-			if (! locate_job(new_jobname, server_out, cur_server)) {
+			if (!locate_job(new_jobname, server_out, cur_server)) {
 				fprintf(stderr, "qsub: job %s apparently deleted\n", new_jobname);
 				exit_qsub(1);
 			}
@@ -1698,14 +1699,14 @@ retry:
 
 	/* now verify the value of job id */
 
-	amt = PBS_MAXSVRJOBID+1;
+	amt = PBS_MAXSVRJOBID + 1;
 	pc = momjobid;
 	while (amt > 0) {
 		int len = CS_read(news, pc, amt);
 		if (len <= 0)
 			break;
 		pc += len;
-		if (*(pc-1) == '\0')
+		if (*(pc - 1) == '\0')
 			break;
 		amt -= len;
 	}
@@ -1807,7 +1808,7 @@ static void
 interactive(void)
 {
 	int amt = 0;
-	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM+2] = {0};
+	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM + 2] = {0};
 	pbs_socklen_t fromlen = 0;
 	int news = 0;
 	int nsel = 0;
@@ -1850,7 +1851,7 @@ interactive(void)
 			 */
 			EnterCriticalSection(&continuethread_cs);
 			/* connect to server, status job to see if still there */
-			if (! locate_job(new_jobname, server_out, cur_server)) {
+			if (!locate_job(new_jobname, server_out, cur_server)) {
 				fprintf(stderr, "qsub: job %s apparently deleted\n",
 					new_jobname);
 				closesocket(comm_sock);
@@ -1898,14 +1899,14 @@ interactive(void)
 
 	/* now verify the value of job id */
 
-	amt = PBS_MAXSVRJOBID+1;
+	amt = PBS_MAXSVRJOBID + 1;
 	pc = momjobid;
 	while (amt > 0) {
 		fromlen = recv(news, pc, amt, 0);
 		if (fromlen <= 0)
 			break;
 		pc += fromlen;
-		if (*(pc-1) == '\0')
+		if (*(pc - 1) == '\0')
 			break;
 		amt -= fromlen;
 	}
@@ -2413,7 +2414,7 @@ fwd_tgt_creds(krb5_context context, krb5_auth_context auth_context, krb5_princip
 	if (krb5_princ_size(context, server) < 2)
 		return KRB5_CC_BADNAME;
 
-	rhost = malloc(server->data[1].length+1);
+	rhost = malloc(server->data[1].length + 1);
 	if (!rhost)
 		return ENOMEM;
 	free_rhost = 1;
@@ -3083,7 +3084,7 @@ process_opts(int argc, char **argv, int passet)
 						break;
 
 					}
-					if ((*optarg=='y')) {
+					if (*optarg=='y') {
 						roptarg_inter=TRUE;
 						if (Interact_opt)
 							fprintf(stderr, "%s", reruninteract);
@@ -3544,7 +3545,7 @@ do_dir(char *opts, int opt_pass, char *retmsg, size_t ret_size)
 	int nxt_pos = 0;
 	size_t max_size = ret_size - 2 /* 2 deducted for adding newline at end */;
 #define MAX_ARGV_LEN 128
-	static char *vect[MAX_ARGV_LEN+1];
+	static char *vect[MAX_ARGV_LEN + 1];
 
 	make_argv(&argc, vect, opts);
 	ret = process_opts(argc, vect, opt_pass);
@@ -3623,12 +3624,12 @@ set_opt_defaults()
 static int
 get_script(FILE *file, char *script, char *prefix)
 {
-	char s[MAX_LINE_LEN+1];
+	char s[MAX_LINE_LEN + 1];
 	char *sopt;
 	int err = 0;
 	int exec = FALSE;
 	char *cont;
-	char tmp_name[MAXPATHLEN+1];
+	char tmp_name[MAXPATHLEN + 1];
 	FILE *TMP_FILE;
 	char *in;
 #ifndef WIN32
@@ -3676,7 +3677,7 @@ get_script(FILE *file, char *script, char *prefix)
 	while ((in = fgets(s, MAX_LINE_LEN, file)) != NULL) {
 		if (!exec && ((sopt = pbs_ispbsdir(s, prefix)) != NULL)) {
 			while ((*(cont = in + strlen(in) - 2) == ESC_CHAR) &&
-				(*(cont+1) == '\n')) {
+				(*(cont + 1) == '\n')) {
 				/* next line is continuation of this line */
 				*cont = '\0'; /* clear newline from our copy */
 				if (fputs(in, TMP_FILE) < 0) {
@@ -3700,7 +3701,7 @@ get_script(FILE *file, char *script, char *prefix)
 			 * options set on the command line. CMDLINE-1 means
 			 * "one less than CMDLINE priority"
 			 */
-			if (do_dir(sopt, CMDLINE-1, retmsg, MAXPATHLEN) != 0) {
+			if (do_dir(sopt, CMDLINE - 1, retmsg, MAXPATHLEN) != 0) {
 				fprintf(stderr, "%s", retmsg);
 				return (-1);
 			}
@@ -3717,7 +3718,7 @@ get_script(FILE *file, char *script, char *prefix)
 	}
 
 #ifdef WIN32
-	if ((s[0] != '\0') && (s[strlen(s)-1] != '\n')) {
+	if ((s[0] != '\0') && (s[strlen(s) - 1] != '\n')) {
 		fputs("\n", TMP_FILE);
 		printf("qsub: added missing newline in job script.\n");
 	}
@@ -3773,7 +3774,7 @@ read_job_script(char * const script)
 	int errflg; /* error code from get_script() */
 	struct stat statbuf;
 	char *bnp;
-	char basename[PBS_MAXJOBNAME+1]; /* base name of script for job name*/
+	char basename[PBS_MAXJOBNAME + 1]; /* base name of script for job name*/
 	FILE *f; /* FILE pointer to the script */
 
 	/* if script is empty, get standard input */
@@ -3787,7 +3788,7 @@ read_job_script(char * const script)
 #endif
 		}
 
-		if (! N_opt)
+		if (!N_opt)
 			set_attr(&attrib, ATTR_N, "STDIN");
 		if (Interact_opt == FALSE) {
 			errflg = get_script(stdin, script_tmp, set_dir_prefix(dir_prefix, C_opt));
@@ -3803,12 +3804,12 @@ read_job_script(char * const script)
 			perror("qsub: script file:");
 			exit_qsub(1);
 		}
-		if (! S_ISREG(statbuf.st_mode)) {
+		if (!S_ISREG(statbuf.st_mode)) {
 			fprintf(stderr, "qsub: script not a file\n");
 			exit_qsub(1);
 		}
 		if ((f = fopen(script, "r")) != NULL) {
-			if (! N_opt) {
+			if (!N_opt) {
 				if ((bnp = strrchr(script, (int)'/')) != NULL)
 					bnp++;
 				else
@@ -4102,15 +4103,15 @@ env_array_to_varlist(char **envp)
 		while ((*s != '=') && *s)
 			++s;
 		*s = '\0';
-		if (strncmp(*evp, pbs_o_env, sizeof(pbs_o_env)-1) != 0) {
+		if (strncmp(*evp, pbs_o_env, sizeof(pbs_o_env) - 1) != 0) {
 			/* do not add PBS_O_* env variables, as these are set by qsub */
 			strcat(job_env, ",");
 			strcat(job_env, *evp);
 			strcat(job_env, "=");
 #ifdef WIN32
-			back2forward_slash(s+1);
+			back2forward_slash(s + 1);
 #endif
-			(void)copy_env_value(job_env, s+1, 1);
+			(void)copy_env_value(job_env, s + 1, 1);
 		}
 		*s = '=';
 		evp++;
@@ -4196,7 +4197,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		/* From state3, goes back to state1, using 'c' as input */
 		l = *c;
 		*c = '\0';
-		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env)-1) != 0) {
+		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env) - 1) != 0) {
 			/* do not add PBS_O_* env variables, as these are set by qsub */
 
 			env = getenv(s);
@@ -4247,7 +4248,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		}
 
 		/* Have to undo here, since 'c' was incremented by copy_env_value */
-		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env)-1) == 0)
+		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env) - 1) == 0)
 			/* ignore PBS_O_ env variables as these are created by qsub */
 			*pc = '\0';
 
@@ -4382,7 +4383,7 @@ dorecv(void *s, char *buf, int bufsize)
 		remaining -= bytes;
 	} while (!fSuccess); /* repeat loop if ERROR_MORE_DATA */
 #else
-	int sock = (int) *((int *) s);
+	int sock = *((int *) s);
 	int rc;
 
 	do {
@@ -4533,7 +4534,7 @@ send_attrl(void *s, struct attrl *attrib)
 
 /**
  * @brief
- *  Send a null terminated string to the peer process. Used by backrgound and
+ * 	Send a null terminated string to the peer process. Used by backrgound and
  * 	foreground qsub processes to communicate error-strings, job-ids etc.
  *
  * @param[in]	s - pointer to the windows PIPE or Unix domain socket
@@ -4681,6 +4682,8 @@ recv_dyn_string(void *s, char **strp)
 		return -1;
 
 	*strp = strdup(buf);
+	if (*strp == NULL) /* check if strdup failed */
+		return -1;
 	return 0;
 }
 
@@ -4791,7 +4794,7 @@ static int
 handle_attribute_errors(struct ecl_attribute_errors *err_list, char *retmsg)
 {
 	struct attropl *attribute;
-	char * opt;
+	char *opt;
 	int i;
 
 	for (i = 0; i < err_list->ecl_numerrors; i++) {
@@ -4885,12 +4888,12 @@ static int
 do_connect(char *server_out, char *retmsg)
 {
 	int rc = 0;
-	char host[PBS_MAXHOSTNAME+1];
+	char host[PBS_MAXHOSTNAME + 1];
 
-	/* set single threaded mode */
+	/* Set single threaded mode */
 	pbs_client_thread_set_single_threaded_mode();
 
-	/*perform needed security library initializations (including none)*/
+	/* Perform needed security library initializations (including none) */
 	if (CS_client_init() == CS_SUCCESS) {
 		cs_init = 1;
 	} else {
@@ -4905,14 +4908,13 @@ do_connect(char *server_out, char *retmsg)
 		sd_svr = cnt2server(server_out);
 
 	if (sd_svr <= 0) {
-		sprintf(retmsg, "qsub: cannot connect to server %s (errno=%d)\n",
-			pbs_server, pbs_errno);
+		sprintf(retmsg, "qsub: cannot connect to server %s (errno=%d)\n", pbs_server, pbs_errno);
 		return (pbs_errno);
 	}
 
 	refresh_dfltqsubargs();
 
-	pbs_hostvar = malloc(pbs_o_hostsize + PBS_MAXHOSTNAME+1);
+	pbs_hostvar = malloc(pbs_o_hostsize + PBS_MAXHOSTNAME + 1);
 	if (!pbs_hostvar) {
 		sprintf(retmsg, "qsub: out of memory\n");
 		return (2);
@@ -4968,9 +4970,8 @@ do_submit(char *retmsg)
 			return (rc);
 	}
 
-	/* set_job_env must be done here to pick up -v, -V options passed */
-	/* by default_qsub_arguments */
-	if (! set_job_env(basic_envlist, qsub_envlist)) {
+	/* set_job_env must be done here to pick up -v, -V options passed by default_qsub_arguments */
+	if (!set_job_env(basic_envlist, qsub_envlist)) {
 #ifndef WIN32
 		if (x11_disp)
 			snprintf(retmsg, MAXPATHLEN, "qsub: invalid usage of incompatible option –X with –v DISPLAY\n");
@@ -5172,8 +5173,7 @@ dup_attrl(struct attrl *attrib)
 	struct attrl *attr = NULL;
 	struct attrl *attr_new = NULL;
 
-	attr = attrib;
-	while (attr) {
+	for (attr = attrib; attr != NULL; attr = attr->next) {
 		if (attr->resource != NULL) {
 			/* strings have null character also in buf */
 			set_attr_resc(&attr_new, attr->name,
@@ -5182,8 +5182,6 @@ dup_attrl(struct attrl *attrib)
 		} else {
 			set_attr(&attr_new, attr->name, attr->value);
 		}
-
-		attr=attr->next;
 	}
 
 	return attr_new;
@@ -5249,20 +5247,20 @@ get_conf_path()
 static int
 do_submit2(char *rmsg)
 {
-	int retry=5;	/* do a retry count to prevent infinite loop */
+	int retry; /* do a retry count to prevent infinite loop */
 	int rc;
 
-
 	rmsg[0] = '\0';
-	/* save the original job attributes/resources (attrib)	*/
-	/* before 'default_qsub_arguments" was applied. 	*/
+	/*
+	 * Save the original job attributes/resources (attrib)
+	 * before 'default_qsub_arguments" was applied.
+	 */
 	if (attrib != NULL) {
 		if (attrib_o != NULL)
 			free_attrl(attrib_o);
 		attrib_o = dup_attrl(attrib); /* save attributes list */
 		if (attrib_o == NULL) {
-			snprintf(rmsg, MAXPATHLEN-1,
-				"Failed to duplicate attributes list.\n");
+			snprintf(rmsg, MAXPATHLEN, "Failed to duplicate attributes list.\n");
 			return PBSE_PROTOCOL;
 		}
 	}
@@ -5272,8 +5270,7 @@ do_submit2(char *rmsg)
 		free(v_value_o);
 		v_value_o = strdup(v_value);
 		if (v_value_o == NULL) {
-			snprintf(rmsg, MAXPATHLEN-1,
-				"Failed to duplicate original -v value\n");
+			snprintf(rmsg, MAXPATHLEN, "Failed to duplicate original -v value\n");
 			return PBSE_PROTOCOL;
 		}
 	}
@@ -5288,19 +5285,17 @@ do_submit2(char *rmsg)
 	save_opts();
 
 	rc = do_submit(rmsg);
-	while ((rc == PBSE_FORCE_QSUB_UPDATE) && (retry > 0)) {
+	for (retry = 5; (rc == PBSE_FORCE_QSUB_UPDATE) && (retry > 0); retry--) {
 		/* Let's retry with the new "default_qsub_arguments" */
 		refresh_dfltqsubargs();
 
-		/* Use the original attrib value before the previous */
-		/* "default_qsub_arguments" was applied.		*/
+		/* Use the original attrib value before the previous "default_qsub_arguments" was applied. */
 		if (attrib_o != NULL) {
 			if (attrib != NULL)
 				free_attrl(attrib);
 			attrib = dup_attrl(attrib_o);
 			if (attrib == NULL) {
-				snprintf(rmsg, MAXPATHLEN-1,
-					"Failed to duplicate attributes list\n");
+				snprintf(rmsg, MAXPATHLEN, "Failed to duplicate attributes list\n");
 				return PBSE_PROTOCOL;
 			}
 		}
@@ -5310,20 +5305,16 @@ do_submit2(char *rmsg)
 			free(v_value);
 			v_value = strdup(v_value_o);
 			if (v_value == NULL) {
-				snprintf(rmsg, MAXPATHLEN-1,
-					"Failed to duplicate -v value\n");
+				snprintf(rmsg, MAXPATHLEN, "Failed to duplicate -v value\n");
 				return PBSE_PROTOCOL;
 			}
 		}
 
 		restore_opts();
-
 		rc = do_submit(rmsg);
-		retry--;
 	}
 	if (retry == 0) {
-		snprintf(rmsg, MAXPATHLEN-1,
-			"Retry to submit a job exhausted.\n");
+		snprintf(rmsg, MAXPATHLEN, "Retry to submit a job exhausted.\n");
 		rc = PBSE_PROTOCOL;
 	}
 	return (rc);
@@ -5580,7 +5571,7 @@ daemon_submit(const char *qsub_exe, int *do_regular_submit)
 	SECURITY_ATTRIBUTES sa;
 	STARTUPINFO si = {sizeof(si)};
 	PROCESS_INFORMATION pi;
-	char cmd_line[2*MAXPATHLEN + 1];
+	char cmd_line[2 * MAXPATHLEN + 1];
 	int created = 0;
 	HANDLE hEvent;
 
@@ -5588,7 +5579,7 @@ daemon_submit(const char *qsub_exe, int *do_regular_submit)
 	get_comm_filename(fl);
 
 	/*
-	 * we have determined the name of the Named pipe that should be
+	 * We have determined the name of the Named pipe that should be
 	 * used to communicate between the qsub background and foreground
 	 * process. Now try to connect to the background qsub process using this
 	 * named pipe.
@@ -5988,8 +5979,8 @@ fork_and_stay(void)
 		}
 
 		/*
-		 * just close standard files, we don't want to
-		 * be session leader or close all other files
+		 * Just close standard files. We don't want to
+		 * be session leader or close all other files.
 		 */
 		(void) fclose(stdin);
 		(void) fclose(stdout);
@@ -6009,8 +6000,10 @@ fork_and_stay(void)
 		pbs_client_thread_set_single_threaded_mode();
 
 		do_daemon_stuff();
-		/* control should never reach here */
-		/* still adding an exit, so it does not traverse parent code */
+		/*
+		 * Control should never reach here.
+		 * Still adding an exit, so it does not traverse parent code.
+		 */
 		exit(1);
 	}
 	/* parent code */
@@ -6089,12 +6082,13 @@ again:
 			(send_string(&sock, qsub_cwd) == 0) &&
 			(send_opts(&sock) == 0)) {
 
-			/* read back the first error code from the background
-			 * which confirms whether the background received our data
+			/*
+			 * Read back the first error code from the background,
+			 * which confirms whether the background received our data.
 			 */
 			if (dorecv(&sock, (char *) &rc, sizeof(int)) == 0) {
 				/*
-				 * we were able to send data to the background daemon.
+				 * We were able to send data to the background daemon.
 				 * Now, even if we fail to read back response from
 				 * background, we do not want to submit again.
 				 */
@@ -6105,13 +6099,14 @@ again:
 			if ((recv_string(&sock, retmsg) != 0) ||
 				dorecv(&sock, (char *) &rc, sizeof(int)) != 0) {
 
-				/* Something bad happened, either background submitted
+				/*
+				 * Something bad happened, either background submitted
 				 * and failed to send us response, or it failed before
 				 * submitting.
 				 */
 				rc = -1;
 				sprintf(retmsg, "Failed to recv data from background qsub\n");
-				/* fall through to print the error message */
+				/* Error message will be printed in caller */
 			}
 		}
 		/* going down, no need to free stuff */
@@ -6159,7 +6154,7 @@ int
 main(int argc, char **argv, char **envp) /* qsub */
 {
 	int errflg; /* option error */
-	static char script[MAXPATHLEN+1] = ""; /* name of script file */
+	static char script[MAXPATHLEN + 1] = ""; /* name of script file */
 	char *q_n_out; /* queue part of destination */
 	char *s_n_out; /* server part of destination */
 	/* server:port to send request to */
@@ -6168,7 +6163,7 @@ main(int argc, char **argv, char **envp) /* qsub */
 	int rc = 0; /* error code for submit */
 	int do_regular_submit = 1; /* used if daemon based submit fails */
 #ifdef WIN32 /* Windows */
-	char qsub_exe[MAXPATHLEN+1];
+	char qsub_exe[MAXPATHLEN + 1];
 #endif
 	int daemon_up = 0;
 
@@ -6206,7 +6201,7 @@ main(int argc, char **argv, char **envp) /* qsub */
 	 * 4) Name of the target server, if any, else NULL/empty
 	 *
 	 */
-	if ((argc == 4 || argc == 5) && (strcasecmp(argv[1], "--daemon")==0)) {
+	if ((argc == 4 || argc == 5) && (strcasecmp(argv[1], "--daemon") == 0)) {
 		if (argc == 4)
 			do_daemon_stuff(argv[2], argv[3], NULL);
 		else
@@ -6266,9 +6261,11 @@ main(int argc, char **argv, char **envp) /* qsub */
 		snprintf(server_out, sizeof(server_out), "%s", s_n_out);
 	}
 
-	/* Get required environment variables to be sent to the server. */
-	/* Must be done early here, as basic_envlist and qsub_envlist will */
-	/* be sent to the qsub daemon if needed */
+	/*
+	 * Get required environment variables to be sent to the server.
+	 * Must be done early here, as basic_envlist and qsub_envlist will
+	 * be sent to the qsub daemon if needed.
+	 */
 	basic_envlist = job_env_basic();
 	if (basic_envlist == NULL)
 		exit_qsub(3);
