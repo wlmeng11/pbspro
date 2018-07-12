@@ -4235,13 +4235,13 @@ final:
  * static buffer and length used by various messages for communication
  * between the qsub foreground and background process
  */
-static char *buf = NULL;
-static int buflen = 0;
+static char *daemon_buf = NULL;
+static int daemon_buflen = 0;
 
 /**
  * @brief
  *  This static internal function is used to easily resize a buffer
- * 	uses static variables buf, and buflen defined above
+ * 	uses static variables daemon_buf, and daemon_buflen defined above
  *
  * @param bufused - Amount of the buffer used
  * @param lenreq - Amount of length required by new data
@@ -4256,17 +4256,17 @@ resize_buffer(int bufused, int lenreq)
 {
 	char *p;
 	lenreq += bufused;
-	if (buflen < lenreq) {
+	if (daemon_buflen < lenreq) {
 		lenreq += 1000; /* adding 1000 so that we realloc fewer times */
-		p = realloc(buf, lenreq);
+		p = realloc(daemon_buf, lenreq);
 		if (p == NULL) {
-			free(buf);
-			buf = NULL;
-			buflen = 0;
+			free(daemon_buf);
+			daemon_buf = NULL;
+			daemon_buflen = 0;
 			return -1;
 		}
-		buf = p;
-		buflen = lenreq;
+		daemon_buf = p;
+		daemon_buflen = lenreq;
 	}
 	return 0;
 }
@@ -4457,7 +4457,7 @@ send_attrl(void *s, struct attrl *attrib)
 			return -1;
 
 		/* write the lengths */
-		p = buf + bufused;
+		p = daemon_buf + bufused;
 		memmove(p, &lenN, sizeof(int));
 		p += sizeof(int);
 		memmove(p, &lenR, sizeof(int));
@@ -4480,7 +4480,7 @@ send_attrl(void *s, struct attrl *attrib)
 		attrib = attrib->next;
 	}
 	if ((dosend(s, (char *) &bufused, sizeof(int)) != 0) ||
-		(dosend(s, buf, bufused) != 0))
+		(dosend(s, daemon_buf, bufused) != 0))
 		return -1;
 
 	return 0;
@@ -4539,11 +4539,11 @@ recv_attrl(void *s, struct attrl **attrib)
 	if (resize_buffer(0, recvlen) != 0)
 		return -1;
 
-	if (dorecv(s, buf, recvlen) != 0)
+	if (dorecv(s, daemon_buf, recvlen) != 0)
 		return -1;
 
-	p = buf;
-	while (p - buf < recvlen) {
+	p = daemon_buf;
+	while (p - daemon_buf < recvlen) {
 		memmove(&lenN, p, sizeof(int));
 		p += sizeof(int);
 		memmove(&lenR, p, sizeof(int));
@@ -4552,7 +4552,7 @@ recv_attrl(void *s, struct attrl **attrib)
 		p += sizeof(int);
 
 		if (lenR > 0) {
-			/* strings have null character also in buf */
+			/* strings have null character also in daemon_buf */
 			set_attr_resc(&attr, p,
 				p + lenN,
 				p + lenN + lenR);
@@ -4629,13 +4629,13 @@ recv_dyn_string(void *s, char **strp)
 
 	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
 		return -1;
-	/* resizes the global 'buf' array */
+	/* resizes the global 'daemon_buf' array */
 	if (resize_buffer(0, recvlen) != 0)
 		return -1;
-	if (dorecv(s, buf, recvlen) != 0)
+	if (dorecv(s, daemon_buf, recvlen) != 0)
 		return -1;
 
-	*strp = strdup(buf);
+	*strp = strdup(daemon_buf);
 	if (*strp == NULL) /* check if strdup failed */
 		return -1;
 	return 0;
@@ -4666,7 +4666,7 @@ send_opts(void *s)
 	if (resize_buffer(0, 100) != 0)
 		return -1;
 
-	sprintf(buf,
+	sprintf(daemon_buf,
 		"%d %d %d %d %d %d %d %d %d %d "
 		"%d %d %d %d %d %d %d %d %d %d "
 		"%d %d %d %d %d %d %d %d %d %d "
@@ -4680,7 +4680,7 @@ send_opts(void *s)
 		Resvend_opt, pwd_opt, cred_opt, block_opt, P_opt,
 					relnodes_on_stageout_opt);
 
-	return (send_string(s, buf));
+	return (send_string(s, daemon_buf));
 }
 
 /**
@@ -4708,10 +4708,10 @@ recv_opts(void *s)
 	if (resize_buffer(0, 100) != 0)
 		return -1;
 
-	if (recv_string(s, buf) != 0)
+	if (recv_string(s, daemon_buf) != 0)
 		return -1;
 
-	sscanf(buf,
+	sscanf(daemon_buf,
 		"%d %d %d %d %d %d %d %d %d %d "
 		"%d %d %d %d %d %d %d %d %d %d "
 		"%d %d %d %d %d %d %d %d %d %d "
