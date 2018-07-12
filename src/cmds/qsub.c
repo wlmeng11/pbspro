@@ -4275,13 +4275,13 @@ resize_buffer(int bufused, int lenreq)
 #ifdef DEBUG
 /**
  * @brief
- *	prints the error messgae
+ *	Prints the result of GetLastError()
  */
 static void
-printLastError()
+print_last_error()
 {
-	LPVOID lpMsgBuf;
-	LPVOID lpDisplayBuf;
+	LPVOID lp_msg_buf;
+	LPVOID lp_display_buf;
 	DWORD dw = GetLastError();
 
 	FormatMessage(
@@ -4291,10 +4291,10 @@ printLastError()
 		NULL,
 		dw,
 		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		(LPTSTR) &lpMsgBuf,
+		(LPTSTR) &lp_msg_buf,
 		0, NULL);
 
-	printf("%s\n", lpMsgBuf);
+	printf("%s\n", lp_msg_buf);
 }
 #endif
 #endif
@@ -4636,7 +4636,7 @@ recv_dyn_string(void *s, char **strp)
 		return -1;
 
 	*strp = strdup(daemon_buf);
-	if (*strp == NULL) /* check if strdup failed */
+	if (*strp == NULL)
 		return -1;
 	return 0;
 }
@@ -5497,7 +5497,7 @@ out:
 
 error:
 #ifdef DEBUG
-	printLastError();
+	print_last_error();
 #endif
 	ResetEvent(hEvent); /* reset event to wake up waiting client anyway */
 	DisconnectNamedPipe(hPipe);
