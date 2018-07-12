@@ -332,9 +332,7 @@ static int block_opt_o = FALSE;
 static int relnodes_on_stageout_opt_o = FALSE;
 
 
-/*
- * The following bunch of functions are "Utility" functions.
- */
+/* The following functions are "Utility" functions. */
 
 /**
  * @brief
@@ -364,7 +362,7 @@ log_cmds_portfw_msg(char *msg)
  *
  */
 static void
-log_syslog(char const * const msg)
+log_syslog(char *msg)
 {
 	openlog("qsub", LOG_PID | LOG_CONS | LOG_NOWAIT, LOG_USER);
 	syslog(LOG_ERR, "%s", msg);
@@ -436,9 +434,7 @@ comma_token(char *str)
  * @retval	!NULL - Success - Pointer to pv parameter
  */
 static char *
-copy_env_value(char *dest, /* destination */
-	char *pv, /* value string */
-	int quote_flg) /* non-zero then assume single word (quoting on) */
+copy_env_value(char *dest, char *pv, int quote_flg)
 {
 	int go = 1;
 	int q_ch = 0;
@@ -845,14 +841,13 @@ exit_qsub(int exitstatus)
  * @brief
  *	strdup_esc_commas - duplicate a string escaping commas
  *	The string is duplicated with all commas in the original string
- *	escaped by preceeding black slash
+ *	escaped by preceding escape character.
  *
  * @param[in] str_to_dup - string to be duplicated
  *
  * @return
  * @retval string Succes
  * @retval NULL   Failure
- *
  */
 static char *
 strdup_esc_commas(char *str_to_dup)
@@ -866,7 +861,7 @@ strdup_esc_commas(char *str_to_dup)
 	returnstr = endstr = malloc(strlen(str_to_dup)*2 + 2);
 	/* even for an all-comma string, this should suffice */
 	if (returnstr == NULL)
-		return (returnstr); /* just return null on malloc failure */
+		return NULL; /* just return null on malloc failure */
 	while (*roaming != '\0') {
 		while (*roaming != '\0' && *roaming != ',')
 			*(endstr++) = *(roaming++);
@@ -888,8 +883,8 @@ strdup_esc_commas(char *str_to_dup)
 static void
 print_usage()
 {
+	static char usage2[]="       qsub --version\n";
 #ifdef WIN32
-	static char usag2[]="       qsub --version\n";
 	static char usage[]=
 		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
 	"\t[-C directive_prefix] [-e path] [-f ] [-G] [-h ] [-j oe|eo] [-J X-Y[:Z]]\n"
@@ -898,7 +893,6 @@ print_usage()
 	"\t[-R o|e|oe] [-S path] [-u user_list] [-W otherattributes=value...]\n"
 	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
 #else
-	static char usag2[]="       qsub --version\n";
 	static char usage[]=
 		"usage: qsub [-a date_time] [-A account_string] [-c interval]\n"
 	"\t[-C directive_prefix] [-e path] [-f ] [-h ] [-I [-X]] [-j oe|eo] [-J X-Y[:Z]]\n"
@@ -909,15 +903,12 @@ print_usage()
 	"\t[-v variable_list] [-V ] [-z] [script | -- command [arg1 ...]]\n";
 #endif
 	fprintf(stderr, "%s", usage);
-	fprintf(stderr, "%s", usag2);
+	fprintf(stderr, "%s", usage2);
 }
 
 /* End of "Utility" functions. */
 
-/*
- * The following bunch of functions support the "Interactive Job"
- * capability of PBS.
- */
+/* The following functions support the "Interactive Job" capability of PBS. */
 
 /**
  * @brief
@@ -927,7 +918,7 @@ print_usage()
  *
  * @return string
  * @retval portstring holding port info
- * exits from program on failure
+ * @note exits from program on failure
  *
  */
 static char *
@@ -939,8 +930,8 @@ interactive_port()
 	unsigned short port;
 
 	if ((isatty(0) == 0) || (isatty(1) == 0)) {
-		fprintf(stderr, "qsub:\tstandard input and output must be a "
-			"terminal for\n\tinteractive job submission\n");
+		fprintf(stderr, "qsub:\tstandard input and output must be a terminal for\n"
+			"\tinteractive job submission\n");
 		exit_qsub(1);
 	}
 	comm_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -1076,7 +1067,7 @@ stopme(pid_t p)
 {
 	(void)tcsetattr(0, TCSANOW, &oldtio); /* reset terminal */
 	kill(p, SIGTSTP);
-	(void)settermraw(&oldtio); /* back to raw when we resume */
+	settermraw(&oldtio); /* back to raw when we resume */
 }
 
 /**
@@ -1200,7 +1191,7 @@ writer(int s)
 	char c;
 	int i;
 	int newline = 1;
-	char tilda = '~';
+	char tilde = '~';
 	int wi;
 
 	/* read from stdin, and write to the socket */
@@ -1209,7 +1200,7 @@ writer(int s)
 		i = read(0, &c, 1);
 		if (i > 0) { /* read data */
 			if (newline) {
-				if (c == tilda) { /* maybe escape character */
+				if (c == tilde) { /* maybe escape character */
 
 					/* read next character to check */
 
@@ -1231,8 +1222,8 @@ writer(int s)
 						stopme(getpid());
 						continue;
 #endif /* VDSUSP */
-					} else { /* not escape, write out tilda */
-						while ((wi = CS_write(s, &tilda, 1)) != 1) {
+					} else { /* not escape, write out tilde */
+						while ((wi = CS_write(s, &tilde, 1)) != 1) {
 							if ((wi == -1) && (errno == EINTR))
 								continue;
 							else
@@ -1565,9 +1556,9 @@ x11handler(int X_data_socket, int interactive_reader_socket)
 	for (n = 0; n < NUM_SOCKS; n++) {
 		(socks + n)->active = 0;
 	}
-	(socks + 0)->sock = X_data_socket;
-	(socks + 0)->active = 1;
-	(socks + 0)->listening = 1;
+	socks->sock = X_data_socket;
+	socks->active = 1;
+	socks->listening = 1;
 
 	/* Try to open a socket for the local X server. */
 
@@ -1605,7 +1596,6 @@ interactive(void)
 	int ret;
 
 	/* disallow ^Z which hangs up MOM starting an interactive job */
-
 	sigemptyset(&act.sa_mask);
 	act.sa_handler = no_suspend;
 	act.sa_flags = 0;
@@ -1614,9 +1604,7 @@ interactive(void)
 		exit_qsub(1);
 	}
 
-	/* Catch SIGINT and SIGTERM, and */
-	/* setup to catch Death of child */
-
+	/* Catch SIGINT and SIGTERM, and setup to catch Death of child */
 	act.sa_handler = catchint;
 	if ((sigaction(SIGINT, &act, NULL) < 0) ||
 		(sigaction(SIGTERM, &act, NULL) < 0)) {
@@ -1630,17 +1618,16 @@ interactive(void)
 	}
 
 	/* save the old terminal setting */
-
 	if (tcgetattr(0, &oldtio) < 0) {
 		perror("qsub: unable to get terminal settings");
 		exit_qsub(1);
 	}
 
 	/* Get the current window size, to be sent to MOM later */
-
 	if (getwinsize(&wsz)) {
-		wsz.ws_row = 20; /* unable to get actual values */
-		wsz.ws_col = 80; /* set defaults */
+		/* unable to get actual values, set defaults */
+		wsz.ws_row = 20;
+		wsz.ws_col = 80;
 		wsz.ws_xpixel = 0;
 		wsz.ws_ypixel = 0;
 	}
@@ -1648,7 +1635,6 @@ interactive(void)
 	printf("qsub: waiting for job %s to start\n", new_jobname);
 
 	/* Accept connection on socket set up earlier */
-
 	nsel = 0;
 	while (nsel == 0) {
 		FD_ZERO(&selset);
@@ -1683,8 +1669,8 @@ retry:
 		exit_qsub(1);
 	}
 
-	/* When Mom connects we expect:
-	 *
+	/*
+	 * When Mom connects we expect:
 	 * first, to engage in an authentication activity
 	 * second, mom sends the job id for us to verify
 	 */
@@ -1745,11 +1731,7 @@ retry:
 
 	child = fork();
 	if (child == 0) {
-		/*
-		 * child process - start the reader function
-		 *                 set terminal into raw mode
-		 */
-
+		/* child process - start the reader function set terminal into raw mode */
 		settermraw(&oldtio);
 
 		if (Forwardx11_opt) {
@@ -1759,7 +1741,7 @@ retry:
 			 */
 			x11handler(X11_comm_sock, news);
 		} else {
-			/*call interactive job's reader*/
+			/* call interactive job's reader */
 			(void) reader(news);
 		}
 		/* reset terminal */
@@ -1768,10 +1750,7 @@ retry:
 		exit_qsub(0);
 
 	} else if (child > 0) {
-		/*
-		 * parent - start the writer function
-		 */
-
+		/* parent - start the writer function */
 		act.sa_handler = catchchild;
 		if (sigaction(SIGCHLD, &act, NULL) < 0)
 			exit_qsub(1);
@@ -1779,7 +1758,6 @@ retry:
 		writer(news);
 
 		/* all done - make sure the child is gone and reset the terminal */
-
 		kill(child, SIGTERM);
 		shutdown(comm_sock, SHUT_RDWR);
 		close(comm_sock);
@@ -1793,7 +1771,7 @@ retry:
 	}
 }
 
-#else /* end of ! WIN32 code */
+#else /* end of Unix code */
 /**
  * @brief
  *	interactive - set up for interactive communication with job
@@ -1876,7 +1854,7 @@ interactive(void)
 		exit_qsub(1);
 	}
 	LeaveCriticalSection(&continuethread_cs);
-	strncpy(remote_ip, inet_ntoa(from.sin_addr), INET_ADDR_STRLEN); /* safe because remote_ip was initialized with zeroes */
+	snprintf(remote_ip, sizeof(remote_ip), "%s", inet_ntoa(from.sin_addr));
 	if (remote_ip == NULL) {
 		perror("qsub: Failed to get IP address of execution host ");
 		closesocket(comm_sock);
@@ -2003,14 +1981,9 @@ interactive(void)
 	exit_qsub(0);
 }
 #endif
-/*
- * End of "Interactive Job" functions.
- */
+/* End of "Interactive Job" functions. */
 
-/*
- * The following bunch of functions support the "Block Job"
- * capability of PBS.
- */
+/* The following functions support the "Block Job" capability of PBS. */
 
 /**
  * @brief
@@ -2292,14 +2265,9 @@ err:
 	exit_qsub(3);
 }
 
-/*
- ** End of "Block Job" functions.
- */
+/* End of "Block Job" functions. */
 
-/*
- * The following bunch of functions support the "Kerberos Authentication"
- * capability of PBS.
- */
+/* The following functions support the "Kerberos Authentication" capability of PBS. */
 
 #ifdef PBS_CRED_DCE_KRB5
 
@@ -2791,12 +2759,10 @@ get_passwd()
 	return ret;
 }
 
-/*
- * End of "Kerberos Authentication" functions.
- */
+/* End of "Kerberos Authentication" functions. */
 
 /*
- * The following bunch of functions support the "Options Processing"
+ * The following functions support the "Options Processing"
  * functionality of qsub.
  */
 
@@ -3415,7 +3381,7 @@ process_opts(int argc, char **argv, int passet)
  * @return     command_flag - indicates whether an executable was specified instead of a job script
  */
 static int
-process_special_args(int const argc, char ** const argv, char * const script)
+process_special_args(int argc, char **argv, char *script)
 {
 	int command_flag = 0;
 	char *arg_list = NULL;
@@ -3597,12 +3563,10 @@ set_opt_defaults()
 		set_attr(&attrib, ATTR_r, "TRUE");
 }
 
-/*
- * End of "Options Processing" functions.
- */
+/* End of "Options Processing" functions. */
 
 /*
- * The following bunch of functions support the "Job Script"
+ * The following functions support the "Job Script"
  * functionality of qsub.
  */
 
@@ -3769,7 +3733,7 @@ set_dir_prefix(char *prefix, int diropt)
  * @param[in] script - path of job script to read from
  */
 static void
-read_job_script(char * const script)
+read_job_script(char *script)
 {
 	int errflg; /* error code from get_script() */
 	struct stat statbuf;
@@ -3838,14 +3802,9 @@ read_job_script(char * const script)
 	}
 }
 
-/*
- * End of "Job Script" functions.
- */
+/* End of "Job Script" functions. */
 
-/*
- * The following bunch of functions supports the "Environment Variables"
- * feature of qsub.
- */
+/* The following functions supports the "Environment Variables" feature of qsub. */
 
 /**
  * @brief
@@ -4267,14 +4226,10 @@ final:
 	return TRUE;
 }
 
-/*
- * End of "Environment Variables" functions.
- */
+/* End of "Environment Variables" functions. */
 
 
-/*
- * The following bunch of functions support the "Daemon" capability of qsub.
- */
+/* The following functions support the "Daemon" capability of qsub. */
 
 /*
  * static buffer and length used by various messages for communication
@@ -4321,7 +4276,6 @@ resize_buffer(int bufused, int lenreq)
 /**
  * @brief
  *	prints the error messgae
- *
  */
 static void
 printLastError()
@@ -4921,8 +4875,7 @@ do_connect(char *server_out, char *retmsg)
 	}
 	if ((rc = gethostname(host, (sizeof(host) - 1))) == 0) {
 		if ((rc = get_fullhostname(host, host, (sizeof(host) - 1))) == 0) {
-			strcpy(pbs_hostvar, ",PBS_O_HOST=");
-			strcat(pbs_hostvar, host);
+			snprintf(pbs_hostvar, pbs_o_hostsize + PBS_MAXHOSTNAME + 1, ",PBS_O_HOST=%s", host);
 		}
 	}
 	if (rc != 0) {
@@ -5564,7 +5517,7 @@ error:
  * @return     rc                - Error code
  */
 static int
-daemon_submit(const char *qsub_exe, int *do_regular_submit)
+daemon_submit(char *qsub_exe, int *do_regular_submit)
 {
 	int rc = 0;
 	HANDLE hFile;
@@ -6124,7 +6077,7 @@ again:
  * @return    rc        - Error code
  */
 static int
-regular_submit(const int daemon_up)
+regular_submit(int daemon_up)
 {
 	int rc = 0;
 	rc = do_connect(server_out, retmsg);
@@ -6146,9 +6099,7 @@ regular_submit(const int daemon_up)
 	return rc;
 }
 
-/*
- * End of "Daemon" functions.
- */
+/* End of "Daemon" functions. */
 
 int
 main(int argc, char **argv, char **envp) /* qsub */
