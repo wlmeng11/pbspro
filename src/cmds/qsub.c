@@ -189,7 +189,7 @@ static char const reruninteract[] = "qsub (Warning): Interactive jobs will be tr
 static char const badw[] = "qsub: illegal -W value\n";
 
 /* Security library variables */
-static int cs_init = 0; /*1==security library initialized, 0==not initialized*/
+static int cs_init = 0; /*1 == security library initialized, 0 == not initialized*/
 static int cred_type = -1;
 static size_t cred_len = 0;
 static char *cred_buf = NULL;
@@ -865,7 +865,7 @@ strdup_esc_commas(char *str_to_dup)
 	while (*roaming != '\0') {
 		while (*roaming != '\0' && *roaming != ',')
 			*(endstr++) = *(roaming++);
-		if (*roaming==',') {
+		if (*roaming == ',') {
 			*(endstr++) = ESC_CHAR;
 			*(endstr++) = ',';
 			roaming++;
@@ -1580,7 +1580,7 @@ static void
 interactive(void)
 {
 	int amt;
-	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM + 2];
+	char cur_server[PBS_MAXSERVERNAME + PBS_MAXPORTNUM + 2];
 	pbs_socklen_t fromlen;
 	char momjobid[PBS_MAXSVRJOBID + 1];
 	int news;
@@ -1786,7 +1786,7 @@ static void
 interactive(void)
 {
 	int amt = 0;
-	char cur_server[PBS_MAXSERVERNAME+PBS_MAXPORTNUM + 2] = {0};
+	char cur_server[PBS_MAXSERVERNAME + PBS_MAXPORTNUM + 2] = {0};
 	pbs_socklen_t fromlen = 0;
 	int news = 0;
 	int nsel = 0;
@@ -2640,7 +2640,7 @@ get_grid_proxy()
 				continue;
 			}
 
-			type = sp+4;
+			type = sp + 4;
 			for (sp=type; *sp; sp++) {
 				if (*sp == '/') {
 					*sp++ = '\0';
@@ -2960,10 +2960,10 @@ process_opts(int argc, char **argv, int passet)
 				break;
 			case 'l':
 				l_opt = passet;
-				if ((i=set_resources(&attrib, optarg, (passet==CMDLINE), &erp))) {
+				if ((i=set_resources(&attrib, optarg, (passet == CMDLINE), &erp))) {
 					if (i > 1) {
 						pbs_prt_parse_err("qsub: illegal -l value\n", optarg,
-							(int)(erp-optarg), i);
+							(int)(erp - optarg), i);
 					} else
 						fprintf(stderr, "qsub: illegal -l value\n");
 					errflg++;
@@ -3050,7 +3050,7 @@ process_opts(int argc, char **argv, int passet)
 						break;
 
 					}
-					if (*optarg=='y') {
+					if (*optarg == 'y') {
 						roptarg_inter=TRUE;
 						if (Interact_opt)
 							fprintf(stderr, "%s", reruninteract);
