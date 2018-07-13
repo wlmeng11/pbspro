@@ -4237,10 +4237,9 @@ static int daemon_buflen = 0;
 
 /**
  * @brief
- *  This static internal function is used to easily resize a buffer
- * 	uses static variables daemon_buf, and daemon_buflen defined above
+ *  Resize the static variable daemon_buf.
  *
- * @param bufused - Amount of the buffer used
+ * @param bufused - Amount of the buffer already used
  * @param lenreq - Amount of length required by new data
  *
  * @return - Error code
@@ -4249,13 +4248,14 @@ static int daemon_buflen = 0;
  *
  */
 static int
-resize_buffer(int bufused, int lenreq)
+resize_daemon_buf(int bufused, int lenreq)
 {
 	char *p;
-	lenreq += bufused;
-	if (daemon_buflen < lenreq) {
-		lenreq += 1000; /* adding 1000 so that we realloc fewer times */
-		p = realloc(daemon_buf, lenreq);
+	int new_buflen = lenreq + bufused;
+
+	if (daemon_buflen < new_buflen) {
+		new_buflen += 1000; /* adding 1000 so that we realloc fewer times */
+		p = realloc(daemon_buf, new_buflen);
 		if (p == NULL) {
 			free(daemon_buf);
 			daemon_buf = NULL;
@@ -4263,7 +4263,7 @@ resize_buffer(int bufused, int lenreq)
 			return -1;
 		}
 		daemon_buf = p;
-		daemon_buflen = lenreq;
+		daemon_buflen = new_buflen;
 	}
 	return 0;
 }
@@ -4450,7 +4450,7 @@ send_attrl(void *s, struct attrl *attrib)
 		len_v = strlen(attrib->value) + 1;
 
 		lenreq = len_n + len_r + len_v + 3 * sizeof(int);
-		if (resize_buffer(bufused, lenreq) != 0)
+		if (resize_daemon_buf(bufused, lenreq) != 0)
 			return -1;
 
 		/* write the lengths */
@@ -4533,7 +4533,7 @@ recv_attrl(void *s, struct attrl **attrib)
 
 	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
 		return -1;
-	if (resize_buffer(0, recvlen) != 0)
+	if (resize_daemon_buf(0, recvlen) != 0)
 		return -1;
 
 	if (dorecv(s, daemon_buf, recvlen) != 0)
@@ -4627,7 +4627,7 @@ recv_dyn_string(void *s, char **strp)
 	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
 		return -1;
 	/* resizes the global 'daemon_buf' array */
-	if (resize_buffer(0, recvlen) != 0)
+	if (resize_daemon_buf(0, recvlen) != 0)
 		return -1;
 	if (dorecv(s, daemon_buf, recvlen) != 0)
 		return -1;
@@ -4660,7 +4660,7 @@ send_opts(void *s)
 	 * If a new set of opts are added, the buffer space of 100 allocated here
 	 * needs to be double checked.
 	 */
-	if (resize_buffer(0, 100) != 0)
+	if (resize_daemon_buf(0, 100) != 0)
 		return -1;
 
 	sprintf(daemon_buf,
@@ -4702,7 +4702,7 @@ recv_opts(void *s)
 	 * If a new set of opts are added, the buffer space of 100 allocated here
 	 * needs to be double checked.
 	 */
-	if (resize_buffer(0, 100) != 0)
+	if (resize_daemon_buf(0, 100) != 0)
 		return -1;
 
 	if (recv_string(s, daemon_buf) != 0)
