@@ -165,15 +165,12 @@
 #define QSUB_DMN_TIMEOUT_SHORT 5
 
 
-/* extern global variables */
 #ifdef NAS /* localmod 005 */
 extern void set_attr_resc(struct attrl **attrib, char *attrib_name, char *attrib_resc, char *attrib_value);
 #endif /* localmod 005 */
 extern char *msg_force_qsub_update;
 
-/*
- * The following variables are file static (ie. global in this file).
- */
+
 static char PBS_DPREFIX_DEFAULT[] = "#PBS";
 static char const pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
 
@@ -217,8 +214,8 @@ static struct winsize wsz; /* Window size */
 #endif
 
 
-static char retmsg[MAXPATHLEN]; /* global var to hold the message that background qsub process will send */
-static char qsub_cwd[MAXPATHLEN + 1]; /* global var to pass cwd to background qsub */
+static char retmsg[MAXPATHLEN]; /* holds the message that background qsub process will send */
+static char qsub_cwd[MAXPATHLEN + 1]; /* buffer to pass cwd to background qsub */
 
 
 static struct attrl *attrib = NULL; /* Attribute list */
@@ -332,7 +329,7 @@ static int block_opt_o = FALSE;
 static int relnodes_on_stageout_opt_o = FALSE;
 
 
-/* The following functions are "Utility" functions. */
+/* The following are "Utility" functions. */
 
 /**
  * @brief
