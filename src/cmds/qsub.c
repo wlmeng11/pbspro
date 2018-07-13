@@ -2796,7 +2796,7 @@ process_opts(int argc, char **argv, int passet)
 	size_t N_len = 0;
 #ifdef WIN32
 	struct attrl *ap = NULL;
-	short int nSizeofHostName = 0;
+	short int n_sizeof_hostname = 0;
 	char *orig_apvalue = NULL;
 	char *temp_apvalue = NULL;
 #endif
@@ -3825,7 +3825,7 @@ job_env_basic(void)
 	char *p = NULL;
 	char *env = NULL;
 #ifdef WIN32
-	OSVERSIONINFO osInfo;
+	OSVERSIONINFO os_info;
 #else
 	struct utsname uns;
 #endif
@@ -3982,9 +3982,9 @@ job_env_basic(void)
 		*s = '\0';
 
 #ifdef WIN32 /* Windows */
-	osInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	if (GetVersionEx(&osInfo)) {
-		switch (osInfo.dwPlatformId) {
+	os_info.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	if (GetVersionEx(&os_info)) {
+		switch (os_info.dwPlatformId) {
 			case 0:
 				strcat(job_env, ",PBS_O_SYSTEM=VER_PLATFORM_WIN32s");
 				break;
@@ -4320,22 +4320,22 @@ dorecv(void *s, char *buf, int bufsize)
 	char *p = buf;
 	int remaining = bufsize;
 #ifdef WIN32
-	BOOL fSuccess = 0;
-	HANDLE hPipe = (HANDLE) s;
+	BOOL f_success = 0;
+	HANDLE h_pipe = (HANDLE) s;
 
 	do {
-		fSuccess = ReadFile(
-			hPipe, /* handle to pipe */
+		f_success = ReadFile(
+			h_pipe, /* handle to pipe */
 			p, /* buffer to receive data */
 			remaining, /* size of buffer */
 			&bytes, /* number of bytes read */
 			NULL); /* not overlapped I/O */
 
-		if (!fSuccess && GetLastError() != ERROR_MORE_DATA)
+		if (!f_success && GetLastError() != ERROR_MORE_DATA)
 			return -1;
 		p += bytes;
 		remaining -= bytes;
-	} while (!fSuccess); /* repeat loop if ERROR_MORE_DATA */
+	} while (!f_success); /* repeat loop if ERROR_MORE_DATA */
 #else
 	int sock = *((int *) s);
 	int rc;
@@ -4377,17 +4377,17 @@ dosend(void *s, char *buf, int bufsize)
 {
 	int bytes = 0;
 #ifdef WIN32
-	BOOL fSuccess = 0;
-	HANDLE hPipe = (HANDLE) s;
+	BOOL f_success = 0;
+	HANDLE h_pipe = (HANDLE) s;
 
-	fSuccess = WriteFile(
-		hPipe, /* handle to pipe */
+	f_success = WriteFile(
+		h_pipe, /* handle to pipe */
 		buf, /* buffer to write from */
 		bufsize, /* number of bytes to write */
 		&bytes, /* number of bytes written */
 		NULL); /* not overlapped I/O */
 
-	if (!fSuccess || bufsize != bytes)
+	if (!f_success || bufsize != bytes)
 		return -1;
 #else
 	int sock = (int) *((int *) s);
@@ -4440,40 +4440,40 @@ static int
 send_attrl(void *s, struct attrl *attrib)
 {
 	int bufused = 0;
-	int lenN = 0, lenR = 0, lenV = 0;
+	int len_n = 0, len_r = 0, len_v = 0;
 	char *p;
 	int lenreq = 0;
 
 	while (attrib) {
-		lenN = strlen(attrib->name) + 1;
+		len_n = strlen(attrib->name) + 1;
 		if (attrib->resource)
-			lenR = strlen(attrib->resource) + 1;
+			len_r = strlen(attrib->resource) + 1;
 		else
-			lenR = 0;
-		lenV = strlen(attrib->value) + 1;
+			len_r = 0;
+		len_v = strlen(attrib->value) + 1;
 
-		lenreq = lenN + lenR + lenV + 3 * sizeof(int);
+		lenreq = len_n + len_r + len_v + 3 * sizeof(int);
 		if (resize_buffer(bufused, lenreq) != 0)
 			return -1;
 
 		/* write the lengths */
 		p = daemon_buf + bufused;
-		memmove(p, &lenN, sizeof(int));
+		memmove(p, &len_n, sizeof(int));
 		p += sizeof(int);
-		memmove(p, &lenR, sizeof(int));
+		memmove(p, &len_r, sizeof(int));
 		p += sizeof(int);
-		memmove(p, &lenV, sizeof(int));
+		memmove(p, &len_v, sizeof(int));
 		p += sizeof(int);
 
 		/* now add the strings */
-		memmove(p, attrib->name, lenN);
-		p += lenN;
-		if (lenR > 0) {
-			memmove(p, attrib->resource, lenR);
-			p += lenR;
+		memmove(p, attrib->name, len_n);
+		p += len_n;
+		if (len_r > 0) {
+			memmove(p, attrib->resource, len_r);
+			p += len_r;
 		}
-		memmove(p, attrib->value, lenV);
-		p += lenV;
+		memmove(p, attrib->value, len_v);
+		p += len_v;
 
 		bufused += lenreq;
 
@@ -4531,7 +4531,7 @@ recv_attrl(void *s, struct attrl **attrib)
 	int recvlen = 0;
 	struct attrl *attr = NULL;
 	char *p;
-	int lenN = 0, lenR = 0, lenV = 0;
+	int len_n = 0, len_r = 0, len_v = 0;
 	char *attr_v_val = NULL;
 
 	if (dorecv(s, (char *) &recvlen, sizeof(int)) != 0)
@@ -4544,18 +4544,18 @@ recv_attrl(void *s, struct attrl **attrib)
 
 	p = daemon_buf;
 	while (p - daemon_buf < recvlen) {
-		memmove(&lenN, p, sizeof(int));
+		memmove(&len_n, p, sizeof(int));
 		p += sizeof(int);
-		memmove(&lenR, p, sizeof(int));
+		memmove(&len_r, p, sizeof(int));
 		p += sizeof(int);
-		memmove(&lenV, p, sizeof(int));
+		memmove(&len_v, p, sizeof(int));
 		p += sizeof(int);
 
-		if (lenR > 0) {
+		if (len_r > 0) {
 			/* strings have null character also in daemon_buf */
 			set_attr_resc(&attr, p,
-				p + lenN,
-				p + lenN + lenR);
+				p + len_n,
+				p + len_n + len_r);
 		} else {
 			/*
 			 * if value is ATTR_v, we need to add PBS_O_HOSTNAME to it
@@ -4564,18 +4564,18 @@ recv_attrl(void *s, struct attrl **attrib)
 			 * from the front end qsub
 			 */
 			if (strcmp(p, ATTR_v) == 0 && pbs_hostvar != NULL) {
-				attr_v_val = malloc(lenV + strlen(pbs_hostvar) + 1);
+				attr_v_val = malloc(len_v + strlen(pbs_hostvar) + 1);
 				if (!attr_v_val)
 					return -1;
-				strcpy(attr_v_val, p + lenN);
+				strcpy(attr_v_val, p + len_n);
 				strcat(attr_v_val, pbs_hostvar);
 				set_attr(&attr, p, attr_v_val);
 				free(attr_v_val);
 			} else {
-				set_attr(&attr, p, p + lenN);
+				set_attr(&attr, p, p + len_n);
 			}
 		}
-		p += lenN + lenR + lenV;
+		p += len_n + len_r + len_v;
 	}
 	*attrib = attr;
 	return 0;
@@ -5329,35 +5329,35 @@ get_comm_filename(char *fl)
 static void
 do_daemon_stuff(char *file, char *handle, char *server)
 {
-	HANDLE hPipe;
-	int rc, pipeRc;
-	HANDLE hEvent, hEventParent;
-	HANDLE hSockEvent;
-	OVERLAPPED oOverlap;
+	HANDLE h_pipe;
+	int rc, pipe_rc;
+	HANDLE h_event, h_event_parent;
+	HANDLE h_sock_event;
+	OVERLAPPED o_overlap;
 	int svr_sock = -1;
 	HANDLE handles[2];
 	time_t connect_time = 0;
 	time_t cred_connect_time = time(0); /* Record current time to compare against the credential timeout value of 30 mins */
 
 	sd_svr = -1; /* not connected */
-	hEventParent = atoi(handle);
-	if (hEventParent == -1)
+	h_event_parent = atoi(handle);
+	if (h_event_parent == -1)
 		goto error;
 
-	hEvent = CreateEvent(
+	h_event = CreateEvent(
 		NULL, /* default security attribute */
 		TRUE, /* manual-reset event */
 		FALSE, /* initial state = signaled */
 		NULL); /* unnamed event object */
-	if (hEvent == NULL)
+	if (h_event == NULL)
 		goto error;
 
-	hSockEvent = WSACreateEvent();
-	if (hSockEvent == NULL)
+	h_sock_event = WSACreateEvent();
+	if (h_sock_event == NULL)
 		goto error;
 
-	oOverlap.hEvent = hEvent;
-	hPipe = CreateNamedPipe(file,
+	o_overlap.h_event = h_event;
+	h_pipe = CreateNamedPipe(file,
 		PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
 		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
 		PIPE_UNLIMITED_INSTANCES,
@@ -5365,21 +5365,21 @@ do_daemon_stuff(char *file, char *handle, char *server)
 		BUFSIZE, /* input buffer size */
 		PIPE_TIMEOUT, /* client time-out */
 		NULL); /* no security attribute */
-	if (hPipe == INVALID_HANDLE_VALUE)
+	if (h_pipe == INVALID_HANDLE_VALUE)
 		goto error;
 
 	/* set single threaded mode */
 	pbs_client_thread_set_single_threaded_mode();
 
 	while (1) {
-		if (!ConnectNamedPipe(hPipe, &oOverlap)) {
-			pipeRc = GetLastError();
-			if (pipeRc == ERROR_IO_PENDING) {
+		if (!ConnectNamedPipe(h_pipe, &o_overlap)) {
+			pipe_rc = GetLastError();
+			if (pipe_rc == ERROR_IO_PENDING) {
 				if (svr_sock == -1) { /* first time */
-					if (SetEvent(hEventParent) == 0)
+					if (SetEvent(h_event_parent) == 0)
 						goto error;
 					/* do wait for single object */
-					rc = WaitForSingleObject(hEvent,
+					rc = WaitForSingleObject(h_event,
 						QSUB_DMN_TIMEOUT_LONG * 1000);
 					if (rc != WAIT_OBJECT_0)
 						goto out; /* timeout */
@@ -5388,12 +5388,12 @@ do_daemon_stuff(char *file, char *handle, char *server)
 					 * wait for both server connection
 					 * and client pipe
 					 */
-					if (!WSAResetEvent(hSockEvent))
+					if (!WSAResetEvent(h_sock_event))
 						goto error;
-					if (!ResetEvent(hEvent))
+					if (!ResetEvent(h_event))
 						goto error;
 
-					if (WSAEventSelect(svr_sock, hSockEvent,
+					if (WSAEventSelect(svr_sock, h_sock_event,
 						FD_CLOSE | FD_READ) != 0)
 						goto error;
 
@@ -5406,8 +5406,8 @@ do_daemon_stuff(char *file, char *handle, char *server)
 					if ((time(0) - cred_connect_time) > (CREDENTIAL_LIFETIME - QSUB_DMN_TIMEOUT_LONG))
 						goto error;
 
-					handles[0] = hEvent;
-					handles[1] = hSockEvent;
+					handles[0] = h_event;
+					handles[1] = h_sock_event;
 					rc = WaitForMultipleObjects(2, handles,
 						FALSE, QSUB_DMN_TIMEOUT_LONG * 1000);
 					if (rc == WAIT_FAILED)
@@ -5420,22 +5420,22 @@ do_daemon_stuff(char *file, char *handle, char *server)
 						}
 					}
 				}
-			} else if (pipeRc != ERROR_PIPE_CONNECTED)
+			} else if (pipe_rc != ERROR_PIPE_CONNECTED)
 				goto error;
 		}
 
-		if ((recv_attrl(hPipe, &attrib) != 0) ||
-			(recv_string(hPipe, destination) != 0) ||
-			(recv_string(hPipe, script_tmp) != 0) ||
-			(recv_string(hPipe, cred_name) != 0) ||
+		if ((recv_attrl(h_pipe, &attrib) != 0) ||
+			(recv_string(h_pipe, destination) != 0) ||
+			(recv_string(h_pipe, script_tmp) != 0) ||
+			(recv_string(h_pipe, cred_name) != 0) ||
 #if defined(PBS_PASS_CREDENTIALS)
-			(recv_string(hPipe, passwd_buf) != 0) ||
+			(recv_string(h_pipe, passwd_buf) != 0) ||
 #endif
-			(recv_dyn_string(hPipe, &v_value) != 0) ||
-			(recv_dyn_string(hPipe, &basic_envlist) != 0) ||
-			(recv_dyn_string(hPipe, &qsub_envlist) != 0) ||
-			(recv_string(hPipe, qsub_cwd) !=0) ||
-			(recv_opts(hPipe) != 0))
+			(recv_dyn_string(h_pipe, &v_value) != 0) ||
+			(recv_dyn_string(h_pipe, &basic_envlist) != 0) ||
+			(recv_dyn_string(h_pipe, &qsub_envlist) != 0) ||
+			(recv_string(h_pipe, qsub_cwd) !=0) ||
+			(recv_opts(h_pipe) != 0))
 			goto error;
 
 #if defined(PBS_PASS_CREDENTIALS)
@@ -5459,14 +5459,14 @@ do_daemon_stuff(char *file, char *handle, char *server)
 			rc = do_submit2(retmsg);
 		}
 
-		if (send_string(hPipe, retmsg) != 0)
+		if (send_string(h_pipe, retmsg) != 0)
 			goto error;
 
-		if (dosend(hPipe, &rc, sizeof(int)) != 0)
+		if (dosend(h_pipe, &rc, sizeof(int)) != 0)
 			goto error;
 
-		FlushFileBuffers(hPipe);
-		DisconnectNamedPipe(hPipe);
+		Flush_fileBuffers(h_pipe);
+		DisconnectNamedPipe(h_pipe);
 
 		if (sd_svr == -1)
 			goto out;
@@ -5491,17 +5491,17 @@ do_daemon_stuff(char *file, char *handle, char *server)
 #endif
 	}
 out:
-	DisconnectNamedPipe(hPipe);
-	CloseHandle(hPipe);
+	DisconnectNamedPipe(h_pipe);
+	CloseHandle(h_pipe);
 	exit(0);
 
 error:
 #ifdef DEBUG
 	print_last_error();
 #endif
-	ResetEvent(hEvent); /* reset event to wake up waiting client anyway */
-	DisconnectNamedPipe(hPipe);
-	CloseHandle(hPipe);
+	ResetEvent(h_event); /* reset event to wake up waiting client anyway */
+	DisconnectNamedPipe(h_pipe);
+	CloseHandle(h_pipe);
 	exit(1);
 }
 
@@ -5520,13 +5520,13 @@ static int
 daemon_submit(char *qsub_exe, int *do_regular_submit)
 {
 	int rc = 0;
-	HANDLE hFile;
+	HANDLE h_file;
 	SECURITY_ATTRIBUTES sa;
 	STARTUPINFO si = {sizeof(si)};
 	PROCESS_INFORMATION pi;
 	char cmd_line[2 * MAXPATHLEN + 1];
 	int created = 0;
-	HANDLE hEvent;
+	HANDLE h_event;
 
 	/* determine pipe name */
 	get_comm_filename(fl);
@@ -5555,39 +5555,39 @@ daemon_submit(char *qsub_exe, int *do_regular_submit)
 	 */
 
 again:
-	hFile = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
+	h_file = CreateFile(fl, GENERIC_READ | GENERIC_WRITE, 0, NULL,
 			OPEN_EXISTING, 0, NULL);
-	if (hFile == INVALID_HANDLE_VALUE) {
+	if (h_file == INVALID_HANDLE_VALUE) {
 		if (created == 0) {
 			sa.nLength = sizeof(sa);
 			sa.lpSecurityDescriptor = NULL;
 			sa.bInheritHandle = TRUE;
 
 			/* now create a named event to wait on later */
-			hEvent = CreateEvent(
+			h_event = CreateEvent(
 					&sa, /* default security attribute */
 					TRUE, /* manual-reset event */
 					FALSE, /* initial state = signaled */
 					NULL); /* unnamed event object */
-			if (hEvent == NULL)
+			if (h_event == NULL)
 				return rc;
 
 			/* launch new qsub process, connect 2 server */
 			sa.bInheritHandle = FALSE;
 			sprintf(cmd_line, "%s --daemon %s %d %s",
 					qsub_exe, fl,
-					hEvent, server_out);
+					h_event, server_out);
 			if (!CreateProcess(NULL, cmd_line, &sa, &sa,
 						TRUE, CREATE_NO_WINDOW, NULL,
 						NULL, &si, &pi)) {
-				CloseHandle(hEvent);
+				CloseHandle(h_event);
 				return rc;
 			}
 
 			/* now wait for single object */
 			/* foreground process wait a max 10 seconds */
-			rc = WaitForSingleObject(hEvent, 10 * 1000);
-			CloseHandle(hEvent);
+			rc = WaitForSingleObject(h_event, 10 * 1000);
+			CloseHandle(h_event);
 
 			if (rc != WAIT_OBJECT_0) /* timeout */
 				return rc;
@@ -5596,18 +5596,18 @@ again:
 			goto again;
 		}
 	} else {
-		if ((send_attrl(hFile, attrib) == 0) &&
-				(send_string(hFile, destination) == 0) &&
-				(send_string(hFile, script_tmp) == 0) &&
-				(send_string(hFile, cred_name) == 0) &&
+		if ((send_attrl(h_file, attrib) == 0) &&
+				(send_string(h_file, destination) == 0) &&
+				(send_string(h_file, script_tmp) == 0) &&
+				(send_string(h_file, cred_name) == 0) &&
 #if defined(PBS_PASS_CREDENTIALS)
-				(send_string(hFile, passwd_buf) == 0) &&
+				(send_string(h_file, passwd_buf) == 0) &&
 #endif
-				(send_string(hFile, v_value?v_value:"") == 0) &&
-				(send_string(hFile, basic_envlist) == 0) &&
-				(send_string(hFile, qsub_envlist?qsub_envlist:"") == 0) &&
-				(send_string(hFile, qsub_cwd) == 0) &&
-				(send_opts(hFile) == 0)) {
+				(send_string(h_file, v_value?v_value:"") == 0) &&
+				(send_string(h_file, basic_envlist) == 0) &&
+				(send_string(h_file, qsub_envlist?qsub_envlist:"") == 0) &&
+				(send_string(h_file, qsub_cwd) == 0) &&
+				(send_opts(h_file) == 0)) {
 			/*
 			 * we were able to send data to the background qsub.
 			 * Now, even if we fail to read back response from
@@ -5616,8 +5616,8 @@ again:
 			*do_regular_submit = 0;
 
 			/* read back response from background qsub */
-			if ((recv_string(hFile, retmsg) != 0) ||
-					(dorecv(hFile, &rc, sizeof(int)) != 0)) {
+			if ((recv_string(h_file, retmsg) != 0) ||
+					(dorecv(h_file, &rc, sizeof(int)) != 0)) {
 
 				/* Something bad happened, either background submitted
 				 * and failed to send us response, or it failed before
@@ -5628,8 +5628,8 @@ again:
 				/* fall through to print the error message */
 			}
 		}
-		FlushFileBuffers(hFile);
-		CloseHandle(hFile);
+		Flush_fileBuffers(h_file);
+		CloseHandle(h_file);
 	}
 	return rc;
 }
