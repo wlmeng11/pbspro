@@ -3698,7 +3698,11 @@ get_script(FILE *file, char *script, char *prefix)
 
 /**
  * @brief
- *	sets directory prefix
+ *	Returns the directory prefix string, which is chosen from the following possibilities:
+ *	1. the prefix parameter, if not empty
+ *	2. an empty string
+ *	3. the PBS_DPREFIX environment variable
+ *	4. the PBS_DPREFIX_DEFAULT constant
  *
  * @param[in] prefix - string to be prefixed
  * @param[in] diropt - boolean value indicating directory prefix to be set or not
