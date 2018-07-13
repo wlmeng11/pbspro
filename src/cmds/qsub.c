@@ -878,7 +878,7 @@ strdup_esc_commas(char *str_to_dup)
  *
  */
 static void
-print_usage()
+print_usage(void)
 {
 	static char usage2[]="       qsub --version\n";
 #ifdef WIN32
@@ -919,7 +919,7 @@ print_usage()
  *
  */
 static char *
-interactive_port()
+interactive_port(void)
 {
 	pbs_socklen_t namelen;
 	static char portstring[8];
@@ -1991,7 +1991,7 @@ interactive(void)
  *
  */
 static char *
-block_port()
+block_port(void)
 {
 	pbs_socklen_t namelen;
 	static char portstring[8];
@@ -2147,7 +2147,7 @@ set_sig_handlers(void)
  *
  */
 static void
-block()
+block(void)
 {
 	struct sockaddr_in from;
 	pbs_socklen_t fromlen;
@@ -2583,7 +2583,7 @@ done:
  *
  */
 static int
-get_grid_proxy()
+get_grid_proxy(void)
 {
 	int ret = -1;
 #ifdef PBS_CRED_GRIDPROXY
@@ -2728,7 +2728,7 @@ done:
  *
  */
 static int
-get_passwd()
+get_passwd(void)
 {
 	int ret = -1;
 #if defined(PBS_PASS_CREDENTIALS)
@@ -3542,7 +3542,7 @@ do_dir(char *opts, int opt_pass, char *retmsg, size_t ret_size)
  *
  */
 static void
-set_opt_defaults()
+set_opt_defaults(void)
 {
 	if (c_opt == FALSE)
 		set_attr(&attrib, ATTR_c, CHECKPOINT_UNSPECIFIED);
@@ -4279,7 +4279,7 @@ resize_daemon_buf(int bufused, int lenreq)
  *	Prints the result of GetLastError()
  */
 static void
-print_last_error()
+print_last_error(void)
 {
 	LPVOID lp_msg_buf;
 	LPVOID lp_display_buf;
@@ -4995,7 +4995,7 @@ do_submit(char *retmsg)
  *
  */
 static void
-save_opts()
+save_opts(void)
 {
 	/* save the values */
 	a_opt_o = a_opt;
@@ -5044,7 +5044,7 @@ save_opts()
  *
  */
 static void
-restore_opts()
+restore_opts(void)
 {
 	/* save the values */
 	a_opt = a_opt_o;
@@ -5157,7 +5157,7 @@ dup_attrl(struct attrl *attrib)
  *
  */
 static char *
-get_conf_path()
+get_conf_path(void)
 {
 	char *cnf = getenv("PBS_CONF_FILE");
 	char *dup_cnf_path = "";
