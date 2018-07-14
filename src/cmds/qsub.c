@@ -5149,9 +5149,8 @@ dup_attrl(struct attrl *attrib)
  *	for communications between the front-end and
  *	background qsub processes.
  *	The path to the pbs conf file is converted to a string
- *	by replacing the slashes with underscrore char.
- *	If PBS_CONF_FILE is not set, then an empty string
- *	is returned.
+ *	by replacing the slashes with underscore char.
+ *	If PBS_CONF_FILE is not set, then an empty string is returned.
  *
  * @return - The string representing path to the pbs conf file
  *
@@ -5160,12 +5159,15 @@ static char *
 get_conf_path(void)
 {
 	char *cnf = getenv("PBS_CONF_FILE");
-	char *dup_cnf_path = "";
+	/* static pointer so we can free heap memory from previous invocation of this function */
+	static char *dup_cnf_path = NULL;
 	char *p;
 
 	if (cnf) {
 		p = strdup(cnf);
 		if (p) {
+			if (dup_cnf_path)
+				free(dup_cnf_path);
 			dup_cnf_path = p;
 			while (*p) {
 #ifdef WIN32
@@ -5178,8 +5180,12 @@ get_conf_path(void)
 				p++;
 			}
 		}
+		return dup_cnf_path;
+	} else if (dup_cnf_path) {
+		return dup_cnf_path;
+	} else {
+		return "";
 	}
-	return dup_cnf_path;
 }
 
 /**
