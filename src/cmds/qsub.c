@@ -5363,7 +5363,7 @@ do_daemon_stuff(char *file, char *handle, char *server)
 	if (h_sock_event == NULL)
 		goto error;
 
-	o_overlap.h_event = h_event;
+	o_overlap.hEvent = h_event;
 	h_pipe = CreateNamedPipe(file,
 		PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
 		PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
