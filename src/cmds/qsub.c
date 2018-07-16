@@ -5472,7 +5472,7 @@ do_daemon_stuff(char *file, char *handle, char *server)
 		if (dosend(h_pipe, &rc, sizeof(int)) != 0)
 			goto error;
 
-		Flush_fileBuffers(h_pipe);
+		FlushFileBuffers(h_pipe);
 		DisconnectNamedPipe(h_pipe);
 
 		if (sd_svr == -1)
@@ -5635,7 +5635,7 @@ again:
 				/* fall through to print the error message */
 			}
 		}
-		Flush_fileBuffers(h_file);
+		FlushFileBuffers(h_file);
 		CloseHandle(h_file);
 	}
 	return rc;
