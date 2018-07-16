@@ -5166,8 +5166,7 @@ get_conf_path(void)
 	if (cnf) {
 		p = strdup(cnf);
 		if (p) {
-			if (dup_cnf_path)
-				free(dup_cnf_path);
+			free(dup_cnf_path);
 			dup_cnf_path = p;
 			while (*p) {
 #ifdef WIN32
