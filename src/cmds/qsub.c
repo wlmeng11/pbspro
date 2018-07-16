@@ -171,7 +171,7 @@ extern void set_attr_resc(struct attrl **attrib, char *attrib_name, char *attrib
 extern char *msg_force_qsub_update;
 
 
-static char PBS_DPREFIX_DEFAULT[] = "#PBS";
+#define PBS_DPREFIX_DEFAULT "#PBS"
 static char const pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
 
 /* Warning/Error messages */
@@ -203,7 +203,7 @@ static int X11_comm_sock; /* Socket for x11 communication */
 
 #define XAUTH_LEN 512 /* Max size of buffer to store Xauth cookie length */
 #define X11_PORT_LEN 8 /* Max size of buffer to store port information as string */
-static char xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
+static char const xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
 #define X11_MSG_OFFSET sizeof(xauth_err_redirection) /* offset of the redirection clause */
 
 #ifdef WIN32 /* Windows */
