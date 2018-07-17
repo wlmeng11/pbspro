@@ -172,18 +172,18 @@ extern char *msg_force_qsub_update;
 
 
 #define PBS_DPREFIX_DEFAULT "#PBS"
-static const char pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
+#define PBS_O_ENV "PBS_O_" /* prefix for environment variables created by qsub */
 
 /* Warning/Error messages */
 #ifdef WIN32
-static const char intergui_warn[] = "qsub: only interactive jobs can have GUI\n";
+#define INTER_GUI_WARN "qsub: only interactive jobs can have GUI\n"
 #endif
-static const char interblock_warn[] = "qsub (Warning) : setting \"block\" attribute as \"true\""
-	" for an interactive job will not return job's exit status\n";
-static const char interarray[] = "qsub: interactive and array job submission cannot be used together\n";
-static const char norerunarray[] = "qsub:  cannot submit non-rerunable Array Job\n";
-static const char reruninteract[] = "qsub (Warning): Interactive jobs will be treated as not rerunnable\n";
-static const char badw[] = "qsub: illegal -W value\n";
+#define INTER_BLOCK_WARN "qsub (Warning) : setting \"block\" attribute as \"true\"" \
+	" for an interactive job will not return job's exit status\n"
+#define INTER_ARRAY "qsub: interactive and array job submission cannot be used together\n"
+#define NO_RERUN_ARRAY "qsub:  cannot submit non-rerunable Array Job\n"
+#define INTER_RERUN_WARN "qsub (Warning): Interactive jobs will be treated as not rerunnable\n"
+#define BAD_W "qsub: illegal -W value\n"
 
 /* Security library variables */
 static int cs_init = 0; /*1 == security library initialized, 0 == not initialized*/
@@ -203,8 +203,8 @@ static int X11_comm_sock; /* Socket for x11 communication */
 
 #define XAUTH_LEN 512 /* Max size of buffer to store Xauth cookie length */
 #define X11_PORT_LEN 8 /* Max size of buffer to store port information as string */
-static const char xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
-#define X11_MSG_OFFSET sizeof(xauth_err_redirection) /* offset of the redirection clause */
+#define XAUTH_ERR_REDIRECTION "2>&1" /* redirection string used for xauth command */
+#define X11_MSG_OFFSET sizeof(XAUTH_ERR_REDIRECTION) /* offset of the redirection clause */
 
 #ifdef WIN32 /* Windows */
 static CRITICAL_SECTION continuethread_cs;
@@ -577,7 +577,7 @@ expand_varlist(char *varlist)
 			*p2 = '\0';
 			vv = p2 + 1;
 		}
-		if ((vv == NULL) && (strncmp(vn, pbs_o_env, sizeof(pbs_o_env) - 1) != 0)) {
+		if ((vv == NULL) && (strncmp(vn, PBS_O_ENV, sizeof(PBS_O_ENV) - 1) != 0)) {
 			/* do not add PBS_O_* env variables, as these */
 			/* are set by qsub */
 
@@ -711,7 +711,7 @@ x11_get_authstring(void)
 		ret = snprintf(line, sizeof(line), "%s list unix:%s %s",
 			XAUTH_BINARY,
 			p + 1,
-			xauth_err_redirection);
+			XAUTH_ERR_REDIRECTION);
 		if (ret >= sizeof(line)) {
 			fprintf(stderr, " qsub: line overflow\n");
 			return NULL;
@@ -720,7 +720,7 @@ x11_get_authstring(void)
 		ret = snprintf(line, sizeof(line), "%s list %.255s %s",
 			XAUTH_BINARY,
 			display,
-			xauth_err_redirection);
+			XAUTH_ERR_REDIRECTION);
 		if (ret >= sizeof(line)) {
 			fprintf(stderr, " qsub: line overflow\n");
 			return NULL;
@@ -2910,18 +2910,18 @@ process_opts(int argc, char **argv, int passet)
 #if !defined(PBS_NO_POSIX_VIOLATION)
 			case 'I':
 				if (J_opt != 0) {
-					fprintf(stderr, "%s", interarray);
+					fprintf(stderr, "%s", INTER_ARRAY);
 					errflg++;
 					break;
 				}
 				if_cmd_line(Interact_opt) {
 					Interact_opt = passet;
 					if (block_opt != FALSE) {
-						fprintf(stderr, "%s", interblock_warn);
+						fprintf(stderr, "%s", INTER_BLOCK_WARN);
 						block_opt = FALSE;
 					}
 					if (roptarg_inter == TRUE) {
-						fprintf(stderr, "%s", reruninteract);
+						fprintf(stderr, "%s", INTER_RERUN_WARN);
 					}
 					set_attr(&attrib, ATTR_inter, interactive_port());
 				}
@@ -2935,12 +2935,12 @@ process_opts(int argc, char **argv, int passet)
 				break;
 			case 'J':
 				if (Interact_opt != FALSE) {
-					fprintf(stderr, "%s", interarray);
+					fprintf(stderr, "%s", INTER_ARRAY);
 					errflg++;
 					break;
 				}
 				if (roptarg != 'y') {
-					fprintf(stderr, "%s", norerunarray);
+					fprintf(stderr, "%s", NO_RERUN_ARRAY);
 					errflg++;
 					break;
 				}
@@ -3042,7 +3042,7 @@ process_opts(int argc, char **argv, int passet)
 						errflg++;
 						break;
 					} else if ((*optarg == 'n') && (J_opt != 0)) {
-						fprintf(stderr, "%s", norerunarray);
+						fprintf(stderr, "%s", NO_RERUN_ARRAY);
 						errflg++;
 						break;
 
@@ -3050,7 +3050,7 @@ process_opts(int argc, char **argv, int passet)
 					if (*optarg == 'y') {
 						roptarg_inter=TRUE;
 						if (Interact_opt)
-							fprintf(stderr, "%s", reruninteract);
+							fprintf(stderr, "%s", INTER_RERUN_WARN);
 					}
 					roptarg = *optarg;
 					set_attr(&attrib, ATTR_r, optarg);
@@ -3099,7 +3099,7 @@ process_opts(int argc, char **argv, int passet)
 			case 'W':
 				while (isspace((int)*optarg)) optarg++;
 				if (strlen(optarg) == 0) {
-					fprintf(stderr, "%s", badw);
+					fprintf(stderr, "%s", BAD_W);
 					errflg++;
 					break;
 				}
@@ -3154,7 +3154,7 @@ process_opts(int argc, char **argv, int passet)
 					} else if (strcmp(keyword, ATTR_inter) == 0) {
 						if_cmd_line(Interact_opt) {
 							if (J_opt != 0) {
-								fprintf(stderr, "%s", interarray);
+								fprintf(stderr, "%s", INTER_ARRAY);
 								errflg++;
 								break;
 							}
@@ -3175,16 +3175,16 @@ process_opts(int argc, char **argv, int passet)
 								/* Do Nothing, let it run as a non-interactive job */
 							} else {
 								/* Any value other than true/false is not acceptable */
-								fprintf(stderr, "%s", badw);
+								fprintf(stderr, "%s", BAD_W);
 								errflg++;
 								break;
 							}
 							if (roptarg_inter == TRUE) {
-								fprintf(stderr, "%s", reruninteract);
+								fprintf(stderr, "%s", INTER_RERUN_WARN);
 							}
 							/* check if both block and interactive are true */
 							if ((block_opt != FALSE) && (Interact_opt)) {
-								fprintf(stderr, "%s", interblock_warn);
+								fprintf(stderr, "%s", INTER_BLOCK_WARN);
 								block_opt = FALSE;
 								break;
 							}
@@ -3197,12 +3197,12 @@ process_opts(int argc, char **argv, int passet)
 								/* Do Nothing, Let it run as a non-blocking job */
 							} else {
 								/* Any value other than true/false is not acceptable */
-								fprintf(stderr, "%s", badw);
+								fprintf(stderr, "%s", BAD_W);
 								errflg++;
 								break;
 							}
 							if ((Interact_opt != FALSE) && (block_opt == passet)) {
-								fprintf(stderr, "%s", interblock_warn);
+								fprintf(stderr, "%s", INTER_BLOCK_WARN);
 								block_opt = FALSE;
 								break;
 							}
@@ -3211,7 +3211,7 @@ process_opts(int argc, char **argv, int passet)
 						if_cmd_line(Resvstart_opt) {
 							Resvstart_opt = passet;
 							if ((after = cvtdate(valuewd)) < 0) {
-								fprintf(stderr, "%s", badw);
+								fprintf(stderr, "%s", BAD_W);
 								errflg++;
 								break;
 							}
@@ -3222,7 +3222,7 @@ process_opts(int argc, char **argv, int passet)
 						if_cmd_line(Resvend_opt) {
 							Resvend_opt = passet;
 							if ((after = cvtdate(valuewd)) < 0) {
-								fprintf(stderr, "%s", badw);
+								fprintf(stderr, "%s", BAD_W);
 								errflg++;
 								break;
 							}
@@ -3246,7 +3246,7 @@ process_opts(int argc, char **argv, int passet)
 								 * Entering password in the qsub command line in
 								 * clear text is a security hole, not supported.
 								 */
-								fprintf(stderr, "%s", badw);
+								fprintf(stderr, "%s", BAD_W);
 								errflg++;
 								break;
 							}
@@ -3264,7 +3264,7 @@ process_opts(int argc, char **argv, int passet)
 					i = parse_equal_string(NULL, &keyword, &valuewd);
 				} /* bottom of long while loop */
 				if (i == -1) {
-					fprintf(stderr, "%s", badw);
+					fprintf(stderr, "%s", BAD_W);
 					errflg++;
 				}
 				break;
@@ -3306,7 +3306,7 @@ process_opts(int argc, char **argv, int passet)
 	}
 #ifdef WIN32
 	if ((gui_opt == CMDLINE) && (Interact_opt == FALSE)) {
-		fprintf(stderr, intergui_warn);
+		fprintf(stderr, INTER_GUI_WARN);
 		gui_opt = FALSE;
 		exit_qsub(1);
 	}
@@ -4063,7 +4063,7 @@ env_array_to_varlist(char **envp)
 		while ((*s != '=') && *s)
 			++s;
 		*s = '\0';
-		if (strncmp(*evp, pbs_o_env, sizeof(pbs_o_env) - 1) != 0) {
+		if (strncmp(*evp, PBS_O_ENV, sizeof(PBS_O_ENV) - 1) != 0) {
 			/* do not add PBS_O_* env variables, as these are set by qsub */
 			strcat(job_env, ",");
 			strcat(job_env, *evp);
@@ -4157,7 +4157,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		/* From state3, goes back to state1, using 'c' as input */
 		l = *c;
 		*c = '\0';
-		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env) - 1) != 0) {
+		if (strncmp(s, PBS_O_ENV, sizeof(PBS_O_ENV) - 1) != 0) {
 			/* do not add PBS_O_* env variables, as these are set by qsub */
 
 			env = getenv(s);
@@ -4208,7 +4208,7 @@ set_job_env(char *basic_vlist, char *current_vlist)
 		}
 
 		/* Have to undo here, since 'c' was incremented by copy_env_value */
-		if (strncmp(s, pbs_o_env, sizeof(pbs_o_env) - 1) == 0)
+		if (strncmp(s, PBS_O_ENV, sizeof(PBS_O_ENV) - 1) == 0)
 			/* ignore PBS_O_ env variables as these are created by qsub */
 			*pc = '\0';
 
