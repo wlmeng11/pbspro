@@ -172,18 +172,18 @@ extern char *msg_force_qsub_update;
 
 
 #define PBS_DPREFIX_DEFAULT "#PBS"
-static char const pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
+static const char pbs_o_env[] = "PBS_O_"; /* prefix for environment variables created by qsub */
 
 /* Warning/Error messages */
 #ifdef WIN32
-static char const intergui_warn[] = "qsub: only interactive jobs can have GUI\n";
+static const char intergui_warn[] = "qsub: only interactive jobs can have GUI\n";
 #endif
-static char const interblock_warn[] = "qsub (Warning) : setting \"block\" attribute as \"true\""
+static const char interblock_warn[] = "qsub (Warning) : setting \"block\" attribute as \"true\""
 	" for an interactive job will not return job's exit status\n";
-static char const interarray[] = "qsub: interactive and array job submission cannot be used together\n";
-static char const norerunarray[] = "qsub:  cannot submit non-rerunable Array Job\n";
-static char const reruninteract[] = "qsub (Warning): Interactive jobs will be treated as not rerunnable\n";
-static char const badw[] = "qsub: illegal -W value\n";
+static const char interarray[] = "qsub: interactive and array job submission cannot be used together\n";
+static const char norerunarray[] = "qsub:  cannot submit non-rerunable Array Job\n";
+static const char reruninteract[] = "qsub (Warning): Interactive jobs will be treated as not rerunnable\n";
+static const char badw[] = "qsub: illegal -W value\n";
 
 /* Security library variables */
 static int cs_init = 0; /*1 == security library initialized, 0 == not initialized*/
@@ -203,7 +203,7 @@ static int X11_comm_sock; /* Socket for x11 communication */
 
 #define XAUTH_LEN 512 /* Max size of buffer to store Xauth cookie length */
 #define X11_PORT_LEN 8 /* Max size of buffer to store port information as string */
-static char const xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
+static const char xauth_err_redirection[] = "2>&1"; /* redirection string used for xauth command */
 #define X11_MSG_OFFSET sizeof(xauth_err_redirection) /* offset of the redirection clause */
 
 #ifdef WIN32 /* Windows */
